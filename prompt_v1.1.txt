@@ -1,0 +1,53 @@
+Níže je text faktury získaný pomocí OCR. Prosím analyzuj tento text a extrahuj z něj čistý JSON objekt obsahující pouze klíče a hodnoty. Pokud nějaký údaj chybí nebo není čitelný, nastav hodnotu null.
+
+Validace: Pro pole ico a dic dbej, aby měly správný formát (IČO = 8 číslic, DIČ začíná „CZ“ + 8–10 číslic).
+
+Výstup: Platný JSON se strukturou:
+
+{
+  "id": "",
+  "original_filename": "",
+  "supplier": {
+    "name": "",
+    "ico": "",
+    "dic": "",
+    "address": "",
+    "platce_dph": true
+  },
+  "customer": {
+    "name": "",
+    "ico": "",
+    "dic": "",
+    "address": ""
+  },
+  "invoice_number": "",
+  "invoice_date": "",
+  "tax_date": "",           // datum uskutečnění plnění
+  "due_date": "",
+  "variable_symbol": "",
+  "specific_symbol": "",
+  "iban": "",
+  "swift": "",
+  "items": [
+    {
+      "index": 1,
+      "description": "",
+      "quantity": "",
+      "unit": "",
+      "unit_price": "",
+      "tax_rate": "",
+      "net_amount": "",
+      "tax_amount": "",
+      "gross_amount": ""
+    }
+  ],
+  "net_total": "",
+  "tax_total": "",
+  "gross_total": "",
+  "notes": "",
+  "contact": "",
+  "payment_method": "",     // z textu "Forma úhrady:"
+  "source": "OCR invoice text"
+}
+
+Prosím zachovej jednotné názvy polí (bez mezer, snake_case). Výstup bude připravený pro další zpracování v Pythonu nebo v databázi.

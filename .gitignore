@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Excel or CSV files with personal data
+*.xlsx
+*.csv
+
+# Common Python ignore patterns (optional, adjust if you're not using Python)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+.venv/
+.envrc
+.Python
+*.png
+*.pdf
+*.yml
+*.pth
+Home_use/
+Old_files_tests/
+layoutparser_models/

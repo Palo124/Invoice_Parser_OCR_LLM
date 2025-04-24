@@ -1,0 +1,37 @@
+f"""Analyzuj následující OCR text faktury a extrahuj informace do přesně definovaných polí. Pokud některá hodnota není výslovně uvedena v textu, ponech ji prázdnou. Výstup musí být platný JSON objekt vhodný pro import do databáze.
+
+        Požadovaná pole a instrukce:
+        - ID: (ponech prázdné)
+        - Číslo originálu: Vytáhni původní číslo faktury (např. z textu "FAKTURA - DAŇOVÝ DOKLAD č. 16FVO117" vytáhni "16FVO117").
+        - Building: Adresa odběratele – z textu za "Odběratel:" (např. "Pražská 18, 620 00 Brno 20").
+        - Invoiced to: Jméno osoby, které je faktura vystavena – osobní jméno uvedené poblíž adresy odběratele (např. "Novák").
+        - Invoice date: Datum z položky "Datum vystavení:" (např. "14.04.2016").
+        - Billing period: Vypočítej jako datum vystavení mínus jeden měsíc (např. z "14.04.2016" vznikne "14.03.2016").
+        - Billing Period To: Urči jako konec měsíce předcházejícího měsíci vystavení faktury (např. pro duben 2016 je to "31.03.2016").
+        - Billing period days: Rozdíl mezi Billing Period To a Billing period (např. 31 - 14 = 17 dní).
+        - Billing period months: Billing period days vyděleno 30.
+        - Invoice NO: Pokud se liší od Číslo originálu, extrahuj odpovídající číslo; jinak ponech prázdné.
+        - Company: Název dodavatelské firmy (např. "BHITCZ S.r.o.").
+        - Description: Popis zboží nebo služeb (např. "Školení"). Pokud je více položek, odděl je čárkami.
+        - info: Jakýkoli jiný text, který nepatří do žádné kategorie.
+        - Comment: Zahrň problematické nebo nejasné části z OCR čtení.
+        - TAX %: Sazba DPH (např. "21%").
+        - TAX Kč: Výše DPH v korunách (např. "491,40").
+        - Payment without TAX: Pokud je uvedeno, použij hodnotu bez DPH (např. "2 340,00"); jinak dopočítej ze součtu položek bez daně.
+        - Payment: Celková částka k úhradě (např. "2 832,00").
+        - Advances: ponech prázdné
+        - Advances without TAX: ponech prázdné
+        - Final payment: Stejná hodnota jako Payment.
+        - Category: Pokud lze určit kategorii, uveď ji; jinak ponech prázdné.
+        - Contact: Vytáhni dostupné kontaktní údaje (telefon, e-mail).
+        - Contract: Pokud je uvedena smlouva, extrahuj ji; jinak ponech prázdné.
+        - Type of payment: Z textu "Forma úhrady:" extrahuj typ platby (např. "příkazem").
+        - Source: Nastav jako "OCR invoice text".
+        - Duplicity: ponech prázdné
+        - AVG Monthly payment Without TAX: Vypočítej jako "Payment without TAX" / "Billing period months"y.
+
+        OCR_TEXT:
+        {layout_text}
+
+        Výstupní formát: čistý platný JSON bez komentářů.
+        """
