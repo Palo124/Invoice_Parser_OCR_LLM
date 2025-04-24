@@ -3,6 +3,7 @@
 
 # Excel or CSV files with personal data
 *.xlsx
+*.xls
 *.csv
 
 # Common Python ignore patterns (optional, adjust if you're not using Python)
