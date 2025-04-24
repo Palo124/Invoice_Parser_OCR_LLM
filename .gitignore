@@ -21,3 +21,6 @@ __pycache__/
 Home_use/
 Old_files_tests/
 layoutparser_models/
+*.jpg
+*.jpeg
+*.svg
