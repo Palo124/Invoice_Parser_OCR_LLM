@@ -24,3 +24,4 @@ layoutparser_models/
 *.jpg
 *.jpeg
 *.svg
+*.json
