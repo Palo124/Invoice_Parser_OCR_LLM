@@ -22,7 +22,12 @@ __pycache__/
 Home_use/
 Old_files_tests/
 layoutparser_models/
+Batch_folder/
+Batch_exported_pictures/
 *.jpg
 *.jpeg
 *.svg
 *.json
+*.zip
+*.rar
+
