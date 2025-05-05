@@ -31,5 +31,6 @@ This project automates the extraction of information from scanned paper invoices
 ### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
+```
 
 ## This project is still under Construction.
