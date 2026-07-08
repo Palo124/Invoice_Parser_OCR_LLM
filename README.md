@@ -1,36 +1,50 @@
-#  Batch Invoice Processor
+# Invoice Parser
 
-This project automates the extraction of information from scanned paper invoices using a pipeline of OCR engines, large language models (LLMs), and database storage. It's designed for efficient, large-scale batch processing of Czech-language invoices in PDF or PNG formats.
+Full-stack app for extracting structured data from Czech invoices using OCR + LLMs.
 
-##  Features
+## Stack
 
--  Converts PDF or image invoices into text using multiple OCR engines:
-  - EasyOCR
-  - PaddleOCR
-  - Tesseract (optional)
--  Extracts structured data from OCR text using 3 different LLMs:
-  - DeepSeek
-  - LLaMA (SecondInterface)
-  - Qwen (ThirdInterface)
--  Applies Triple Modular Redundancy (TMR) to merge LLM results
--  Inserts clean, validated invoice data into a PostgreSQL database
--  Tracks runtime, token usage, and cost estimates
--  Moves processed files to an archive folder to avoid re-processing
+- **Backend:** Python, FastAPI, SQLite
+- **Frontend:** React (Vite)
+- **Pipeline:** EasyOCR, PaddleOCR, Tesseract → DeepInfra LLMs → TMR merge
 
-## Tech Stack
+## Project layout
 
-- **Python 3.10+**
-- **Torch** – GPU memory handling
-- **OCR** – EasyOCR, PaddleOCR, Tesseract
-- **LLMs via DeepInfra API** – For structured JSON extraction
-- **PostgreSQL** – Invoice data storage
-- **Dotenv** – For secure API key handling
-
-## Usage
-
-### 1. Install Dependencies
-```bash
-pip install -r requirements.txt
+```
+backend/          # FastAPI API + OCR/LLM pipeline
+frontend/         # React UI
 ```
 
-## This project is still under Construction.
+## Setup
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # add DEEPINFRA_API_KEY
+uvicorn app.main:app --reload --app-dir .
+```
+
+API runs at `http://127.0.0.1:8000`
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+UI runs at `http://localhost:5173`
+
+## API
+
+- `GET /api/health`
+- `GET /api/invoices`
+- `GET /api/invoices/{id}`
+- `POST /api/invoices/upload` (multipart file)
+
+SQLite database is created automatically at `backend/data/app.db`.

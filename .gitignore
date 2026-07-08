@@ -1,34 +1,31 @@
 # Secrets
 .env
+backend/.env
 
-# Excel or CSV files with personal data
-*.xlsx
-*.xls
-*.csv
-
-# Common Python ignore patterns (optional, adjust if you're not using Python)
+# Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-*.env
 .venv/
-.envrc
 .Python
-*.png
+
+# Node
+node_modules/
+frontend/dist/
+
+# App data
+backend/data/app.db
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+backend/data/.gitkeep
+
+# Invoice files
 *.pdf
-*.yml
-*.pth
-Home_use/
-Old_files_tests/
-layoutparser_models/
-Batch_folder/
-Batch_exported_pictures/
+*.png
 *.jpg
 *.jpeg
-*.svg
-*.json
+
+# Misc
+*.xlsx
+*.csv
+*.pth
 *.zip
-*.rar
-*.ods
-*.wsdl
