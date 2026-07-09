@@ -8,10 +8,19 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models.invoice import Invoice
-from app.schemas.invoice import InvoiceDetail, InvoiceSummary
+from app.schemas.invoice import InvoiceDetail, InvoiceSummary, PipelineMetadata
 from app.services.pipeline import InvoicePipeline
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
+
+
+def _build_metadata(invoice: Invoice) -> PipelineMetadata | None:
+    if not invoice.metadata_json:
+        return None
+
+    payload = json.loads(invoice.metadata_json)
+    payload.setdefault("flags", [])
+    return PipelineMetadata.model_validate(payload)
 
 
 def _to_summary(invoice: Invoice) -> InvoiceSummary:
@@ -20,15 +29,38 @@ def _to_summary(invoice: Invoice) -> InvoiceSummary:
 
 def _to_detail(invoice: Invoice) -> InvoiceDetail:
     data = json.loads(invoice.data_json) if invoice.data_json else None
+    metadata = _build_metadata(invoice)
+    if metadata and invoice.extraction_path:
+        metadata.pipeline_mode = metadata.pipeline_mode or invoice.extraction_path
+
     return InvoiceDetail(
         id=invoice.id,
         original_filename=invoice.original_filename,
         status=invoice.status,
         invoice_number=invoice.invoice_number,
         supplier_name=invoice.supplier_name,
+        extraction_path=invoice.extraction_path,
+        confidence=invoice.confidence,
+        needs_review=invoice.needs_review,
         created_at=invoice.created_at,
         data=data,
         error_message=invoice.error_message,
+        metadata=metadata,
+    )
+
+
+def _apply_pipeline_result(invoice: Invoice, result) -> None:
+    supplier = result.data.get("supplier") or {}
+    invoice.status = "completed"
+    invoice.invoice_number = result.data.get("invoice_number")
+    invoice.supplier_name = supplier.get("name")
+    invoice.data_json = json.dumps(result.data, ensure_ascii=False)
+    invoice.extraction_path = result.extraction_path
+    invoice.confidence = result.confidence
+    invoice.needs_review = result.needs_review
+    invoice.metadata_json = json.dumps(
+        {**result.metadata, "flags": result.flags},
+        ensure_ascii=False,
     )
 
 
@@ -72,14 +104,17 @@ async def upload_invoice(
 
     try:
         result = InvoicePipeline().process_file(saved_path)
-        supplier = result.data.get("supplier") or {}
-        invoice.status = "completed"
-        invoice.invoice_number = result.data.get("invoice_number")
-        invoice.supplier_name = supplier.get("name")
-        invoice.data_json = json.dumps(result.data, ensure_ascii=False)
+        _apply_pipeline_result(invoice, result)
+    except NotImplementedError as exc:
+        invoice.status = "failed"
+        invoice.error_message = str(exc)
+        invoice.confidence = "failed"
+        invoice.needs_review = True
     except Exception as exc:
         invoice.status = "failed"
         invoice.error_message = str(exc)
+        invoice.confidence = "failed"
+        invoice.needs_review = True
 
     db.commit()
     db.refresh(invoice)

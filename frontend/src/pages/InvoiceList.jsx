@@ -26,6 +26,8 @@ export default function InvoiceList() {
               <th>Invoice #</th>
               <th>Supplier</th>
               <th>Status</th>
+              <th>Confidence</th>
+              <th>Review</th>
             </tr>
           </thead>
           <tbody>
@@ -40,6 +42,8 @@ export default function InvoiceList() {
                 <td>
                   <span className={`status ${invoice.status}`}>{invoice.status}</span>
                 </td>
+                <td>{invoice.confidence || "-"}</td>
+                <td>{invoice.needs_review ? "yes" : "no"}</td>
               </tr>
             ))}
           </tbody>

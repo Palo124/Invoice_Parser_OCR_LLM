@@ -1,0 +1,29 @@
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class TextExtractionResult:
+    text: str
+    source: str
+    confidence: float
+
+
+@dataclass
+class ExtractionResult:
+    data: dict
+    model: str
+    confidence: str = "high"
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PipelineResult:
+    data: dict
+    extraction_path: str
+    confidence: str
+    needs_review: bool
+    flags: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    text_extraction: TextExtractionResult | None = None
+    extractions: list[ExtractionResult] = field(default_factory=list)

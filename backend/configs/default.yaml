@@ -1,0 +1,19 @@
+pipeline:
+  legacy_extraction_path: legacy:triple_ocr_triple_llm_tmr
+  default_confidence: high
+
+ocr:
+  easyocr_lang: cs
+  paddle_lang: cs
+  tesseract_lang: ces
+  easyocr_gpu: true
+  paddle_gpu: true
+  tesseract_threshold: 15
+  paddle_threshold: 15
+  easyocr_threshold: 30
+  pdf_dpi: 300
+
+llm:
+  deepseek_model: deepseek-ai/DeepSeek-R1
+  llama_model: meta-llama/Llama-3.3-70B-Instruct-Turbo
+  maverick_model: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8

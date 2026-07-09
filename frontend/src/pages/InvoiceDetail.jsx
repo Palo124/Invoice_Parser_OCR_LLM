@@ -39,6 +39,15 @@ export default function InvoiceDetail() {
       <p>
         Status: <span className={`status ${invoice.status}`}>{invoice.status}</span>
       </p>
+      <p>Extraction path: {invoice.extraction_path || "-"}</p>
+      <p>Confidence: {invoice.confidence || "-"}</p>
+      <p>Needs review: {invoice.needs_review ? "yes" : "no"}</p>
+      {invoice.metadata && (
+        <div>
+          <h3>Pipeline metadata</h3>
+          <pre>{JSON.stringify(invoice.metadata, null, 2)}</pre>
+        </div>
+      )}
       {invoice.error_message && <p className="error">{invoice.error_message}</p>}
       {invoice.data ? (
         <pre>{JSON.stringify(invoice.data, null, 2)}</pre>
