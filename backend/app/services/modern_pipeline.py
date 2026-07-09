@@ -1,7 +1,9 @@
 from pathlib import Path
 
+from app.config import settings
 from app.services.exceptions import ProcessingCancelled
 from app.services.llm.extractor import InvoiceLLMExtractor
+from app.services.llm.vision_extractor import InvoiceVisionExtractor
 from app.services.pipeline_common import finalize_pipeline_result
 from app.services.text_extraction.service import TextExtractionService
 from app.services.types import (
@@ -12,14 +14,17 @@ from app.services.types import (
     TextExtractionResult,
 )
 from app.services.validation import InvoiceValidationService
+from app.services.vision import merge_text_and_vision, should_use_vision
+from app.services.vision.page_images import load_page_images
 
 
 class ModernPipeline:
-    """Phase 1–3: text extraction, single LLM extraction, validation layer."""
+    """Phase 1–4: text extraction, LLM extraction, optional vision fallback, validation."""
 
     def __init__(self):
         self.text_extractor = TextExtractionService()
         self.llm_extractor = InvoiceLLMExtractor()
+        self.vision_extractor = InvoiceVisionExtractor()
         self.validator = InvoiceValidationService()
 
     def process_file(
@@ -86,14 +91,16 @@ class ModernPipeline:
         report("llm:deepseek")
         llm_result = self.llm_extractor.extract(filename, bundle.text, bundle.source)
 
-        extraction = ExtractionResult(
-            data=llm_result.parsed_data,
-            model=llm_result.model,
-            raw_output=llm_result.raw_output,
-            ocr_engine=bundle.source,
-            prompt_tokens=llm_result.prompt_tokens,
-            completion_tokens=llm_result.completion_tokens,
-        )
+        extractions = [
+            ExtractionResult(
+                data=llm_result.parsed_data,
+                model=llm_result.model,
+                raw_output=llm_result.raw_output,
+                ocr_engine=bundle.source,
+                prompt_tokens=llm_result.prompt_tokens,
+                completion_tokens=llm_result.completion_tokens,
+            )
+        ]
         steps["llm"].append(
             {
                 "model": llm_result.model,
@@ -106,33 +113,94 @@ class ModernPipeline:
             }
         )
 
+        final_data = llm_result.parsed_data
+        extraction_path = bundle.extraction_path
+        total_tokens = llm_result.prompt_tokens + llm_result.completion_tokens
+        total_cost = llm_result.estimated_cost
+        models = [llm_result.model]
+        vision_used = False
+        vision_triggers: list[str] = []
+
+        run_vision, vision_triggers = should_use_vision(
+            branch=bundle.branch,
+            raw_text=bundle.text,
+            page_count=bundle.page_count,
+            text_data=llm_result.parsed_data,
+            ocr_comparison=bundle.ocr_comparison,
+        )
+        steps["vision_trigger"] = {
+            "enabled": settings.vision_enabled,
+            "should_run": run_vision,
+            "reasons": vision_triggers,
+        }
+
+        if settings.vision_enabled and run_vision:
+            check_cancelled()
+            report("llm:vision")
+            page_images = load_page_images(file_path)
+            vision_result = self.vision_extractor.extract(filename, page_images)
+            merged_data, merged_fields = merge_text_and_vision(
+                llm_result.parsed_data,
+                vision_result.parsed_data,
+            )
+            final_data = merged_data
+            vision_used = True
+            extraction_path = f"{bundle.extraction_path}+vision"
+            total_tokens += vision_result.prompt_tokens + vision_result.completion_tokens
+            total_cost += vision_result.estimated_cost
+            models.append(vision_result.model)
+
+            extractions.append(
+                ExtractionResult(
+                    data=vision_result.parsed_data,
+                    model=vision_result.model,
+                    raw_output=vision_result.raw_output,
+                    ocr_engine="vision",
+                    prompt_tokens=vision_result.prompt_tokens,
+                    completion_tokens=vision_result.completion_tokens,
+                )
+            )
+            steps["vision"] = {
+                "model": vision_result.model,
+                "page_count": vision_result.page_count,
+                "raw_output": vision_result.raw_output,
+                "parsed_json": vision_result.parsed_data,
+                "prompt_tokens": vision_result.prompt_tokens,
+                "completion_tokens": vision_result.completion_tokens,
+                "triggers": vision_triggers,
+            }
+            steps["vision_merge"] = {
+                "merged_fields": merged_fields,
+                "merged_json": merged_data,
+            }
+
         check_cancelled()
         report("validation")
         validation = self.validator.validate(
-            llm_result.parsed_data,
+            final_data,
             raw_text=bundle.text,
             ocr_comparison=bundle.ocr_comparison,
         )
 
         return finalize_pipeline_result(
-            data=llm_result.parsed_data,
-            extraction_path=bundle.extraction_path,
+            data=final_data,
+            extraction_path=extraction_path,
             validation=validation,
             steps=steps,
             metadata={
                 "pipeline_mode": "modern",
                 "text_branch": bundle.branch,
-                "token_usage": {
-                    "total_tokens": llm_result.prompt_tokens + llm_result.completion_tokens,
-                },
-                "estimated_cost": llm_result.estimated_cost,
-                "models": [llm_result.model],
+                "token_usage": {"total_tokens": total_tokens},
+                "estimated_cost": total_cost,
+                "models": models,
                 "structured_output": llm_result.structured_output,
+                "vision_used": vision_used,
+                "vision_triggers": vision_triggers if vision_used else [],
                 **bundle.metadata,
             },
             text_extraction=text_extraction,
-            extractions=[extraction],
+            extractions=extractions,
             raw_text=bundle.text,
             llm_raw_json=llm_result.raw_output,
-            model_used=llm_result.model,
+            model_used=",".join(models),
         )

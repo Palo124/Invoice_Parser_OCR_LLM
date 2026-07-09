@@ -34,6 +34,7 @@ _llm = _yaml.get("llm", {})
 _text = _yaml.get("text_extraction", {})
 
 _validation = _yaml.get("validation", {})
+_vision = _yaml.get("vision", {})
 
 
 class Settings:
@@ -79,6 +80,17 @@ class Settings:
     )
 
     validation_totals_tolerance: float = float(_validation.get("totals_tolerance", 1.0))
+
+    vision_enabled: bool = _vision.get("enabled", True)
+    llm_vision_model: str = _vision.get(
+        "model",
+        "Qwen/Qwen3-VL-30B-A3B-Instruct",
+    )
+    vision_max_pages: int = int(_vision.get("max_pages", 4))
+    vision_max_tokens: int = int(_vision.get("max_tokens", 4096))
+    vision_min_chars_per_page: int = int(_vision.get("min_chars_per_page", 120))
+    vision_min_numeric_columns: int = int(_vision.get("min_numeric_columns", 3))
+    vision_min_numeric_lines: int = int(_vision.get("min_numeric_lines", 4))
 
 
 settings = Settings()

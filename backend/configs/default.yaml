@@ -28,3 +28,12 @@ llm:
 
 validation:
   totals_tolerance: 1.0
+
+vision:
+  enabled: true
+  model: Qwen/Qwen3-VL-30B-A3B-Instruct
+  max_pages: 4
+  max_tokens: 4096
+  min_chars_per_page: 120
+  min_numeric_columns: 3
+  min_numeric_lines: 4

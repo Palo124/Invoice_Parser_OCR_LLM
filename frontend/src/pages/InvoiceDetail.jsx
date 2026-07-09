@@ -162,6 +162,7 @@ export default function InvoiceDetail() {
           </p>
           <p>Needs review: {invoice.needs_review ? "yes" : "no"}</p>
           {invoice.review_status && <p>Review status: {invoice.review_status}</p>}
+          {invoice.metadata?.vision_used && <p>Vision fallback: used</p>}
         </>
       )}
 

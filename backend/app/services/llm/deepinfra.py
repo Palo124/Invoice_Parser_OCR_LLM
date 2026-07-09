@@ -19,6 +19,7 @@ class DeepInfraClient:
         *,
         temperature: float | None = None,
         response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ):
         cleaned = [
             {"role": message["role"], "content": message["content"]}
@@ -31,8 +32,23 @@ class DeepInfraClient:
         }
         if response_format is not None:
             kwargs["response_format"] = response_format
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
 
         return self.client.chat.completions.create(**kwargs)
+
+    def get_vision_completion(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ):
+        return self.get_chat_completion(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens or settings.vision_max_tokens,
+        )
 
     def get_json_object_completion(self, messages: list[dict], *, temperature: float | None = None):
         return self.get_chat_completion(

@@ -41,6 +41,9 @@ class PipelineSteps(BaseModel):
     llm: list[PipelineStepLLM] = Field(default_factory=list)
     tmr: dict[str, Any] | None = None
     validation: dict[str, Any] | None = None
+    vision_trigger: dict[str, Any] | None = None
+    vision: dict[str, Any] | None = None
+    vision_merge: dict[str, Any] | None = None
 
 
 class PipelineMetadata(BaseModel):
@@ -49,6 +52,8 @@ class PipelineMetadata(BaseModel):
     token_usage: dict[str, Any] | None = None
     estimated_cost: float | None = None
     models: list[str] = Field(default_factory=list)
+    vision_used: bool | None = None
+    vision_triggers: list[str] = Field(default_factory=list)
     steps: PipelineSteps | None = None
 
 

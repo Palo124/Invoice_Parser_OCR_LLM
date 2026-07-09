@@ -18,6 +18,9 @@ export function stageIndexFromStages(stages, progressStage) {
     return stages.findIndex((stage) => stage.id === "text:pymupdf");
   }
   if (progressStage.startsWith("llm:")) {
+    if (progressStage === "llm:vision") {
+      return stages.findIndex((stage) => stage.id === "llm:vision");
+    }
     return stages.findIndex((stage) => stage.id === "llm:deepseek");
   }
   if (progressStage === "validation") {

@@ -68,6 +68,24 @@ export default function PipelineStepsView({ steps, live = false }) {
           </StepBlock>
         ))}
 
+      {steps.vision && (
+        <StepBlock
+          title="Vision extraction"
+          subtitle={`${steps.vision.model} · ${steps.vision.page_count} page(s)`}
+        >
+          <pre>{JSON.stringify(steps.vision, null, 2)}</pre>
+        </StepBlock>
+      )}
+
+      {steps.vision_merge && (
+        <StepBlock
+          title="Vision merge"
+          subtitle={`${steps.vision_merge.merged_fields?.length || 0} field(s) from vision`}
+        >
+          <pre>{JSON.stringify(steps.vision_merge, null, 2)}</pre>
+        </StepBlock>
+      )}
+
       {steps.tmr?.merged_json && (
         <StepBlock
           title={`${steps.text_extraction ? "5" : "4"}. TMR merge`}

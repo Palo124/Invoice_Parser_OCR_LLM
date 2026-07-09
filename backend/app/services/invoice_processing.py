@@ -20,6 +20,7 @@ STAGE_LABELS = {
     "ocr:paddleocr": "Running PaddleOCR",
     "llm:deepseek": "Extracting with DeepSeek",
     "llm:llama": "Extracting with Llama",
+    "llm:vision": "Extracting with vision model",
     "tmr": "Merging results (TMR)",
     "validation": "Running validation checks",
     "complete": "Finished",
@@ -65,6 +66,7 @@ def get_display_stages() -> list[dict[str, str]]:
             "text:pymupdf",
             "text:ocr_compare",
             "llm:deepseek",
+            "llm:vision",
             "validation",
         ]
 
