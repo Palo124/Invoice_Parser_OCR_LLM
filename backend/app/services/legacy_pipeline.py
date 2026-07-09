@@ -4,30 +4,31 @@ import numpy as np
 from PIL import Image
 
 from app.config import settings
+from app.services.exceptions import ProcessingCancelled
 from app.services.llm.deepinfra import DeepInfraClient
 from app.services.llm.json_extractor import JSONExtractor
 from app.services.llm.prompt import get_prompt
 from app.services.merge.tmr import triple_modular_redundancy
-from app.services.ocr.easyocr_processor import EasyOCRProcessor
 from app.services.ocr.paddle_ocr_processor import PaddleOCRProcessor
 from app.services.ocr.pytesseract_ocr_processor import PytesseractOCRProcessor
 from app.services.preprocessing.deskew import ImageDeskewer
 from app.services.preprocessing.pdf_converter import PDFToImageConverter
-from app.services.exceptions import ProcessingCancelled
-from app.services.types import ExtractionResult, PipelineResult, ProgressCallback, CancelCheck, TextExtractionResult
+from app.services.types import (
+    CancelCheck,
+    ExtractionResult,
+    PipelineResult,
+    ProgressCallback,
+    TextExtractionResult,
+)
 
 
 class LegacyPipeline:
-    """Original 3x OCR + 3x LLM + TMR pipeline."""
+    """Legacy 2x OCR + 2x LLM + TMR pipeline (kept behind LEGACY_PIPELINE)."""
 
     def __init__(self):
         if not settings.deepinfra_api_key:
             raise ValueError("DEEPINFRA_API_KEY is not set")
 
-        self.ocr_easy = EasyOCRProcessor(
-            languages=[settings.ocr_easyocr_lang],
-            gpu=settings.ocr_easyocr_gpu,
-        )
         self.ocr_paddle = PaddleOCRProcessor(
             lang=settings.ocr_paddle_lang,
             use_gpu=settings.ocr_paddle_gpu,
@@ -43,10 +44,6 @@ class LegacyPipeline:
         self.llm_llama = DeepInfraClient(
             settings.deepinfra_api_key,
             settings.llm_llama_model,
-        )
-        self.llm_maverick = DeepInfraClient(
-            settings.deepinfra_api_key,
-            settings.llm_maverick_model,
         )
 
     def _load_images(self, file_path: Path) -> tuple[list[np.ndarray], str]:
@@ -71,12 +68,7 @@ class LegacyPipeline:
             deskewed.append(rotated_image)
         return deskewed
 
-    def _run_ocr_engine(
-        self,
-        pages: list[np.ndarray],
-        extract_fn,
-        threshold: int,
-    ) -> str:
+    def _run_ocr_engine(self, pages: list[np.ndarray], extract_fn, threshold: int) -> str:
         page_texts: list[str] = []
         for page in pages:
             pil_image = Image.fromarray(page)
@@ -122,10 +114,8 @@ class LegacyPipeline:
         }
         report("preprocessing")
 
-        check_cancelled()
         deskewed_pages = self._deskew_pages(images)
 
-        check_cancelled()
         text_tesseract = self._run_ocr_engine(
             deskewed_pages,
             self.ocr_tesseract.extract_text_layout_from_pil,
@@ -134,7 +124,6 @@ class LegacyPipeline:
         steps["ocr"].append(self._ocr_step("tesseract", text_tesseract))
         report("ocr:tesseract")
 
-        check_cancelled()
         text_paddle = self._run_ocr_engine(
             deskewed_pages,
             self.ocr_paddle.extract_text_layout_from_pil,
@@ -143,28 +132,15 @@ class LegacyPipeline:
         steps["ocr"].append(self._ocr_step("paddleocr", text_paddle))
         report("ocr:paddleocr")
 
-        check_cancelled()
-        text_easy = self._run_ocr_engine(
-            deskewed_pages,
-            self.ocr_easy.image_to_text_layout,
-            settings.ocr_easyocr_threshold,
-        )
-        steps["ocr"].append(self._ocr_step("easyocr", text_easy))
-        report("ocr:easyocr")
-
-        combined_text = "\n\n--- TESSERACT ---\n\n".join(
-            [text_tesseract, text_paddle, text_easy]
-        )
         text_extraction = TextExtractionResult(
-            text=combined_text,
-            source="legacy:tesseract+paddle+easyocr",
+            text="\n\n--- TESSERACT ---\n\n".join([text_tesseract, text_paddle]),
+            source="legacy:tesseract+paddle",
             confidence=1.0,
         )
 
         llm_clients = [
             (self.llm_deepseek, settings.llm_deepseek_model, "tesseract", text_tesseract, "llm:deepseek"),
             (self.llm_llama, settings.llm_llama_model, "paddleocr", text_paddle, "llm:llama"),
-            (self.llm_maverick, settings.llm_maverick_model, "easyocr", text_easy, "llm:maverick"),
         ]
 
         responses = []
@@ -205,7 +181,7 @@ class LegacyPipeline:
         merged = triple_modular_redundancy(
             extractions[0].data,
             extractions[1].data,
-            extractions[2].data,
+            extractions[1].data,
         )
         steps["tmr"] = {"merged_json": merged}
         report("tmr")

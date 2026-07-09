@@ -22,6 +22,7 @@ class PipelineStepLLM(BaseModel):
 
 class PipelineSteps(BaseModel):
     preprocessing: dict[str, Any] | None = None
+    text_extraction: dict[str, Any] | None = None
     ocr: list[PipelineStepOCR] = Field(default_factory=list)
     llm: list[PipelineStepLLM] = Field(default_factory=list)
     tmr: dict[str, Any] | None = None

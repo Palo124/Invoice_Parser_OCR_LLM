@@ -6,7 +6,8 @@ Full-stack app for extracting structured data from Czech invoices using OCR + LL
 
 - **Backend:** Python, FastAPI, SQLite
 - **Frontend:** React (Vite)
-- **Pipeline:** EasyOCR, PaddleOCR, Tesseract → DeepInfra LLMs → TMR merge
+- **Pipeline (default):** PyMuPDF → OCRmyPDF/Tesseract + PaddleOCR → DeepSeek (DeepInfra)
+- **Legacy mode (`LEGACY_PIPELINE=true`):** Tesseract + PaddleOCR → 2× LLM → TMR
 
 ## Project layout
 

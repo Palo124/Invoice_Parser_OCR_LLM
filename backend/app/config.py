@@ -31,6 +31,7 @@ _yaml = _load_yaml_config()
 _pipeline = _yaml.get("pipeline", {})
 _ocr = _yaml.get("ocr", {})
 _llm = _yaml.get("llm", {})
+_text = _yaml.get("text_extraction", {})
 
 
 class Settings:
@@ -40,7 +41,7 @@ class Settings:
     tesseract_cmd: str = os.getenv("TESSERACT_CMD", "/usr/bin/tesseract")
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-    legacy_pipeline: bool = _env_bool("LEGACY_PIPELINE", True)
+    legacy_pipeline: bool = _env_bool("LEGACY_PIPELINE", False)
 
     legacy_extraction_path: str = _pipeline.get(
         "legacy_extraction_path",
@@ -48,14 +49,17 @@ class Settings:
     )
     default_confidence: str = _pipeline.get("default_confidence", "high")
 
-    ocr_easyocr_lang: str = _ocr.get("easyocr_lang", "cs")
+    text_min_chars: int = _text.get("min_chars", 80)
+    text_max_garbage_ratio: float = _text.get("max_garbage_ratio", 0.35)
+    text_require_czech_signal: bool = _text.get("require_czech_signal", True)
+    ocr_agreement_threshold: float = _text.get("ocr_agreement_threshold", 0.75)
+    ocrmypdf_language: str = _text.get("ocrmypdf_language", "ces+eng")
+
     ocr_paddle_lang: str = _ocr.get("paddle_lang", "cs")
     ocr_tesseract_lang: str = _ocr.get("tesseract_lang", "ces")
-    ocr_easyocr_gpu: bool = _ocr.get("easyocr_gpu", True)
     ocr_paddle_gpu: bool = _ocr.get("paddle_gpu", True)
     ocr_tesseract_threshold: int = _ocr.get("tesseract_threshold", 15)
     ocr_paddle_threshold: int = _ocr.get("paddle_threshold", 15)
-    ocr_easyocr_threshold: int = _ocr.get("easyocr_threshold", 30)
     ocr_pdf_dpi: int = _ocr.get("pdf_dpi", 300)
 
     llm_deepseek_model: str = _llm.get("deepseek_model", "deepseek-ai/DeepSeek-V4-Flash")

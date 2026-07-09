@@ -1,19 +1,23 @@
 pipeline:
-  legacy_extraction_path: legacy:triple_ocr_triple_llm_tmr
+  legacy_extraction_path: legacy:double_ocr_double_llm_tmr
   default_confidence: high
 
+text_extraction:
+  min_chars: 80
+  max_garbage_ratio: 0.35
+  require_czech_signal: true
+  ocr_agreement_threshold: 0.75
+  ocrmypdf_language: ces+eng
+
 ocr:
-  easyocr_lang: cs
   paddle_lang: cs
   tesseract_lang: ces
-  easyocr_gpu: true
   paddle_gpu: true
   tesseract_threshold: 15
   paddle_threshold: 15
-  easyocr_threshold: 30
   pdf_dpi: 300
 
-# Fast models for legacy 3x LLM path (see https://deepinfra.com/models)
+# Fast models for legacy 2x LLM path (see https://deepinfra.com/models)
 llm:
   deepseek_model: deepseek-ai/DeepSeek-V4-Flash
   llama_model: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
