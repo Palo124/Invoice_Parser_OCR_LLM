@@ -107,6 +107,8 @@ def reset_for_reprocess(invoice: Invoice) -> None:
     invoice.flags_json = None
     invoice.validation_errors_json = None
     invoice.review_status = None
+    invoice.corrected_fields_json = None
+    invoice.reviewed_at = None
     begin_processing(invoice)
 
 
@@ -205,6 +207,27 @@ def cancel_invoice_processing(db: Session, invoice_id: int) -> Invoice | None:
 
     request_cancel(invoice_id)
     return mark_invoice_cancelled(db, invoice_id)
+
+
+def _remove_uploaded_files(invoice_id: int) -> None:
+    for path in settings.upload_dir.glob(f"{invoice_id}_*"):
+        path.unlink(missing_ok=True)
+
+
+def delete_invoice(db: Session, invoice_id: int) -> bool:
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        return False
+
+    if invoice.status == "processing":
+        cancel_invoice_processing(db, invoice_id)
+        db.refresh(invoice)
+
+    _remove_uploaded_files(invoice_id)
+    db.delete(invoice)
+    db.commit()
+    clear_cancel(invoice_id)
+    return True
 
 
 def run_invoice_job(invoice_id: int, file_path: Path) -> None:

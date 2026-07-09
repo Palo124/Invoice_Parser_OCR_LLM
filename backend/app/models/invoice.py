@@ -26,4 +26,6 @@ class Invoice(Base):
     flags_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     validation_errors_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     review_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    corrected_fields_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

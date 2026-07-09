@@ -1,7 +1,8 @@
 const API_BASE = "/api";
 
-export async function fetchInvoices() {
-  const res = await fetch(`${API_BASE}/invoices`);
+export async function fetchInvoices(filter) {
+  const params = filter && filter !== "all" ? `?filter=${encodeURIComponent(filter)}` : "";
+  const res = await fetch(`${API_BASE}/invoices${params}`);
   if (!res.ok) throw new Error("Failed to load invoices");
   return res.json();
 }
@@ -40,6 +41,54 @@ export async function redoInvoice(id) {
     throw new Error(message);
   }
   return res.json();
+}
+
+export async function updateInvoice(id, data) {
+  const res = await fetch(`${API_BASE}/invoices/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data }),
+  });
+  if (!res.ok) {
+    let message = "Failed to save corrections";
+    try {
+      const err = await res.json();
+      message = err.detail || message;
+    } catch {
+      message = `Failed to save corrections (${res.status})`;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function approveInvoice(id) {
+  const res = await fetch(`${API_BASE}/invoices/${id}/approve`, { method: "POST" });
+  if (!res.ok) {
+    let message = "Failed to approve invoice";
+    try {
+      const err = await res.json();
+      message = err.detail || message;
+    } catch {
+      message = `Failed to approve invoice (${res.status})`;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function deleteInvoice(id) {
+  const res = await fetch(`${API_BASE}/invoices/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    let message = "Failed to delete invoice";
+    try {
+      const err = await res.json();
+      message = err.detail || message;
+    } catch {
+      message = `Failed to delete invoice (${res.status})`;
+    }
+    throw new Error(message);
+  }
 }
 
 let cachedPipelineStages = null;

@@ -78,6 +78,18 @@ class InvoiceSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CorrectedFieldItem(BaseModel):
+    from_value: Any = Field(alias="from")
+    to: Any
+    corrected_at: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class InvoiceUpdateRequest(BaseModel):
+    data: dict[str, Any]
+
+
 class InvoiceDetail(InvoiceSummary):
     data: dict[str, Any] | None = None
     error_message: str | None = None
@@ -87,3 +99,5 @@ class InvoiceDetail(InvoiceSummary):
     model_used: str | None = None
     flagged_fields: list[FlaggedFieldItem] = Field(default_factory=list)
     validation_errors: list[ValidationErrorItem] = Field(default_factory=list)
+    corrected_fields: dict[str, CorrectedFieldItem] = Field(default_factory=dict)
+    reviewed_at: datetime | None = None

@@ -2,21 +2,24 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
 from app.models.invoice import Invoice
-from app.schemas.invoice import InvoiceDetail, InvoiceSummary, PipelineMetadata
+from app.schemas.invoice import InvoiceDetail, InvoiceSummary, InvoiceUpdateRequest, PipelineMetadata
 from app.services.generation.html_renderer import render_invoice_html
 from app.services.invoice_processing import (
     begin_processing,
     cancel_invoice_processing,
+    delete_invoice,
     reset_for_reprocess,
     run_invoice_job,
 )
+from app.services.invoice_review import apply_invoice_corrections, approve_invoice
 from app.services.validation import flagged_fields_from_errors
 from app.services.validation.types import ValidationError
 
@@ -26,6 +29,12 @@ router = APIRouter(prefix="/invoices", tags=["invoices"])
 def _parse_json_list(raw: str | None) -> list:
     if not raw:
         return []
+    return json.loads(raw)
+
+
+def _parse_json_dict(raw: str | None) -> dict:
+    if not raw:
+        return {}
     return json.loads(raw)
 
 
@@ -81,6 +90,8 @@ def _to_detail(invoice: Invoice) -> InvoiceDetail:
         model_used=invoice.model_used,
         flagged_fields=_flagged_fields_for(invoice),
         validation_errors=validation_errors,
+        corrected_fields=_parse_json_dict(invoice.corrected_fields_json),
+        reviewed_at=invoice.reviewed_at,
     )
 
 
@@ -109,9 +120,42 @@ def _upload_path_for(invoice: Invoice) -> Path:
 
 
 @router.get("", response_model=list[InvoiceSummary])
-def list_invoices(db: Session = Depends(get_db)):
-    invoices = db.query(Invoice).order_by(Invoice.created_at.desc()).all()
+def list_invoices(
+    review_filter: str | None = Query(None, alias="filter"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Invoice)
+
+    if review_filter == "needs_review":
+        query = query.filter(
+            Invoice.needs_review.is_(True),
+            (Invoice.review_status.is_(None)) | (Invoice.review_status != "approved"),
+        )
+    elif review_filter == "approved":
+        query = query.filter(Invoice.review_status == "approved")
+
+    invoices = query.order_by(Invoice.created_at.desc()).all()
     return [_to_summary(invoice) for invoice in invoices]
+
+
+@router.get("/{invoice_id}/file")
+def get_invoice_file(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = _get_invoice_or_404(invoice_id, db)
+    path = _upload_path_for(invoice)
+    suffix = path.suffix.lower()
+    media_types = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+    }
+    media_type = media_types.get(suffix, "application/octet-stream")
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=invoice.original_filename,
+        content_disposition_type="inline",
+    )
 
 
 @router.get("/{invoice_id}/html", response_class=HTMLResponse)
@@ -128,6 +172,49 @@ def get_invoice_html(invoice_id: int, db: Session = Depends(get_db)):
 @router.get("/{invoice_id}", response_model=InvoiceDetail)
 def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
     return _to_detail(_get_invoice_or_404(invoice_id, db))
+
+
+@router.patch("/{invoice_id}", response_model=InvoiceDetail)
+def update_invoice(
+    invoice_id: int,
+    payload: InvoiceUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    invoice = _get_invoice_or_404(invoice_id, db)
+    if invoice.review_status == "approved":
+        raise HTTPException(status_code=409, detail="Approved invoices cannot be edited")
+
+    try:
+        apply_invoice_corrections(invoice, payload.data)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PydanticValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    db.commit()
+    db.refresh(invoice)
+    return _to_detail(invoice)
+
+
+@router.post("/{invoice_id}/approve", response_model=InvoiceDetail)
+def approve_invoice_endpoint(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = _get_invoice_or_404(invoice_id, db)
+
+    try:
+        approve_invoice(invoice)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    db.commit()
+    db.refresh(invoice)
+    return _to_detail(invoice)
+
+
+@router.delete("/{invoice_id}", status_code=204)
+def delete_invoice_endpoint(invoice_id: int, db: Session = Depends(get_db)):
+    deleted = delete_invoice(db, invoice_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Invoice not found")
 
 
 @router.post("/{invoice_id}/cancel", response_model=InvoiceDetail)
