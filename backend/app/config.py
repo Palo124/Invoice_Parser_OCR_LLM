@@ -52,6 +52,11 @@ class Settings:
     ocr_tesseract_threshold: int = _ocr.get("tesseract_threshold", 15)
     ocr_paddle_threshold: int = _ocr.get("paddle_threshold", 15)
     ocr_pdf_dpi: int = _ocr.get("pdf_dpi", 300)
+    ocr_column_split_enabled: bool = _ocr.get("layout_preserve_columns", True)
+    ocr_column_gap_ratio: float = float(_ocr.get("layout_column_gap_ratio", 0.18))
+    ocr_layout_space_divisor: float = float(_ocr.get("layout_space_divisor", 8))
+    ocr_layout_char_width: float = float(_ocr.get("layout_char_width", 8))
+    ocr_layout_blank_line_multiplier: float = float(_ocr.get("layout_blank_line_multiplier", 2.5))
 
     llm_primary_model: str = _llm.get("primary_model", "deepseek-ai/DeepSeek-V4-Flash")
     llm_use_structured_output: bool = _llm.get("use_structured_output", True)

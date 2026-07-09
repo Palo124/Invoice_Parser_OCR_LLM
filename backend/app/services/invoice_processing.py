@@ -9,6 +9,7 @@ from app.db import SessionLocal
 from app.models.invoice import Invoice
 from app.services.exceptions import ProcessingCancelled
 from app.services.pipeline import InvoicePipeline
+from app.services.pipeline_common import summarize_step_metrics
 
 STAGE_LABELS = {
     "queued": "Waiting to start",
@@ -120,11 +121,15 @@ def apply_pipeline_result(invoice: Invoice, result) -> None:
 
 
 def _save_progress(db: Session, invoice: Invoice, stage: str, steps: dict) -> None:
+    metrics = summarize_step_metrics(steps)
     metadata = {
         "pipeline_mode": "modern",
         "progress": {"stage": stage, "label": STAGE_LABELS.get(stage, stage)},
         "steps": steps,
         "flags": [],
+        "total_duration_seconds": metrics["total_duration_seconds"],
+        "estimated_cost": metrics["estimated_cost"],
+        "step_metrics": metrics["by_stage"],
     }
     invoice.metadata_json = json.dumps(metadata, ensure_ascii=False)
     db.commit()

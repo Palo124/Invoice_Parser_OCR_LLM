@@ -359,6 +359,53 @@ pre {
   }
 }
 
+.processing-cost-summary {
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.processing-cost-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  align-items: baseline;
+  margin-bottom: 0.75rem;
+}
+
+.processing-cost-header h3 {
+  margin: 0;
+}
+
+.processing-cost-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  color: #374151;
+  font-size: 0.95rem;
+}
+
+.processing-cost-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.processing-cost-table th,
+.processing-cost-table td {
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.processing-cost-table th:last-child,
+.processing-cost-table td:last-child {
+  text-align: right;
+}
+
 .steps-panel {
   margin: 1.5rem 0;
 }

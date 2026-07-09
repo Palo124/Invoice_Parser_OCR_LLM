@@ -11,7 +11,7 @@ from app.services.exceptions import ProcessingCancelled
 from app.services.llm.escalation_extractor import InvoiceEscalationExtractor
 from app.services.llm.extractor import InvoiceLLMExtractor
 from app.services.llm.vision_extractor import InvoiceVisionExtractor
-from app.services.pipeline_common import finalize_pipeline_result
+from app.services.pipeline_common import elapsed_seconds, finalize_pipeline_result, start_timer
 from app.services.text_extraction.service import TextExtractionService
 from app.services.types import (
     CancelCheck,
@@ -54,7 +54,9 @@ class ModernPipeline:
                 on_progress(stage, steps)
 
         check_cancelled()
+        text_started_at = start_timer()
         bundle = self.text_extractor.extract(file_path)
+        text_duration = elapsed_seconds(text_started_at)
         steps["text_extraction"] = {
             "branch": bundle.branch,
             "source": bundle.source,
@@ -62,6 +64,8 @@ class ModernPipeline:
             "page_count": bundle.page_count,
             "char_count": len(bundle.text),
             "preview": bundle.text[:500] + ("…" if len(bundle.text) > 500 else ""),
+            "duration_seconds": text_duration,
+            "estimated_cost": 0.0,
             **bundle.metadata,
         }
         report("text:pymupdf")
@@ -97,7 +101,9 @@ class ModernPipeline:
 
         check_cancelled()
         report("llm:deepseek")
+        llm_started_at = start_timer()
         llm_result = self.llm_extractor.extract(filename, bundle.text, bundle.source)
+        llm_duration = elapsed_seconds(llm_started_at)
 
         extractions = [
             ExtractionResult(
@@ -118,13 +124,14 @@ class ModernPipeline:
                 "prompt_tokens": llm_result.prompt_tokens,
                 "completion_tokens": llm_result.completion_tokens,
                 "structured_output": llm_result.structured_output,
+                "duration_seconds": llm_duration,
+                "estimated_cost": llm_result.estimated_cost,
             }
         )
 
         final_data = llm_result.parsed_data
         extraction_path = bundle.extraction_path
         total_tokens = llm_result.prompt_tokens + llm_result.completion_tokens
-        total_cost = llm_result.estimated_cost
         models = [llm_result.model]
         vision_used = False
         vision_triggers: list[str] = []
@@ -148,6 +155,7 @@ class ModernPipeline:
         if settings.vision_enabled and run_vision:
             check_cancelled()
             report("llm:vision")
+            vision_started_at = start_timer()
             page_images = load_page_images(file_path)
             vision_result = self.vision_extractor.extract(filename, page_images)
             vision_data = vision_result.parsed_data
@@ -155,11 +163,11 @@ class ModernPipeline:
                 llm_result.parsed_data,
                 vision_data,
             )
+            vision_duration = elapsed_seconds(vision_started_at)
             final_data = merged_data
             vision_used = True
             extraction_path = f"{bundle.extraction_path}+vision"
             total_tokens += vision_result.prompt_tokens + vision_result.completion_tokens
-            total_cost += vision_result.estimated_cost
             models.append(vision_result.model)
 
             extractions.append(
@@ -180,17 +188,26 @@ class ModernPipeline:
                 "prompt_tokens": vision_result.prompt_tokens,
                 "completion_tokens": vision_result.completion_tokens,
                 "triggers": vision_triggers,
+                "duration_seconds": vision_duration,
+                "estimated_cost": vision_result.estimated_cost,
             }
             steps["vision_merge"] = {
                 "merged_fields": merged_fields,
                 "merged_json": merged_data,
             }
 
+        validation_started_at = start_timer()
         validation = self.validator.validate(
             final_data,
             raw_text=bundle.text,
             ocr_comparison=bundle.ocr_comparison,
         )
+        validation_duration = elapsed_seconds(validation_started_at)
+        steps["validation"] = {
+            **validation.to_dict(),
+            "duration_seconds": validation_duration,
+            "estimated_cost": 0.0,
+        }
 
         run_escalation, escalation_triggers = should_escalate(
             validation,
@@ -207,6 +224,7 @@ class ModernPipeline:
         if settings.escalation_enabled and run_escalation:
             check_cancelled()
             report("llm:escalation")
+            escalation_started_at = start_timer()
             disagreement_fields = (
                 detect_text_vision_disagreements(llm_result.parsed_data, vision_data)
                 if vision_data is not None
@@ -226,10 +244,10 @@ class ModernPipeline:
                 escalation_result.parsed_data,
                 override_fields,
             )
+            escalation_duration = elapsed_seconds(escalation_started_at)
             escalation_used = True
             extraction_path = f"{extraction_path}+escalation"
             total_tokens += escalation_result.prompt_tokens + escalation_result.completion_tokens
-            total_cost += escalation_result.estimated_cost
             models.append(escalation_result.model)
 
             extractions.append(
@@ -250,17 +268,26 @@ class ModernPipeline:
                 "completion_tokens": escalation_result.completion_tokens,
                 "triggers": escalation_triggers,
                 "override_fields": override_fields,
+                "duration_seconds": escalation_duration,
+                "estimated_cost": escalation_result.estimated_cost,
             }
             steps["escalation_merge"] = {
                 "applied_fields": applied_fields,
                 "merged_json": final_data,
             }
 
+            revalidation_started_at = start_timer()
             validation = self.validator.validate(
                 final_data,
                 raw_text=bundle.text,
                 ocr_comparison=bundle.ocr_comparison,
             )
+            validation_duration += elapsed_seconds(revalidation_started_at)
+            steps["validation"] = {
+                **validation.to_dict(),
+                "duration_seconds": validation_duration,
+                "estimated_cost": 0.0,
+            }
 
         check_cancelled()
         report("validation")
@@ -274,7 +301,6 @@ class ModernPipeline:
                 "pipeline_mode": "modern",
                 "text_branch": bundle.branch,
                 "token_usage": {"total_tokens": total_tokens},
-                "estimated_cost": total_cost,
                 "models": models,
                 "structured_output": llm_result.structured_output,
                 "vision_used": vision_used,

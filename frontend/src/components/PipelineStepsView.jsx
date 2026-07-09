@@ -1,9 +1,13 @@
-function StepBlock({ title, subtitle, defaultOpen = false, children }) {
+import { stepMetricsSubtitle } from "./ProcessingCostSummary.jsx";
+
+function StepBlock({ title, subtitle, metricsSubtitle, defaultOpen = false, children }) {
+  const combinedSubtitle = [subtitle, metricsSubtitle].filter(Boolean).join(" · ");
+
   return (
     <details className="step-block" open={defaultOpen}>
       <summary>
         <span className="step-title">{title}</span>
-        {subtitle && <span className="step-subtitle">{subtitle}</span>}
+        {combinedSubtitle && <span className="step-subtitle">{combinedSubtitle}</span>}
       </summary>
       <div className="step-body">{children}</div>
     </details>
@@ -21,6 +25,7 @@ export default function PipelineStepsView({ steps, live = false }) {
         <StepBlock
           title="1. Text extraction"
           subtitle={`${steps.text_extraction.branch} · ${steps.text_extraction.char_count} characters`}
+          metricsSubtitle={stepMetricsSubtitle(steps.text_extraction)}
           defaultOpen={live}
         >
           <pre>{JSON.stringify(steps.text_extraction, null, 2)}</pre>
@@ -37,6 +42,7 @@ export default function PipelineStepsView({ steps, live = false }) {
         <StepBlock
           title={steps.text_extraction ? "2. Preprocessing" : "1. Preprocessing"}
           subtitle={`${steps.preprocessing.page_count} page(s) · ${steps.preprocessing.source_type}`}
+          metricsSubtitle={stepMetricsSubtitle(steps.preprocessing)}
           defaultOpen={live}
         >
           <pre>{JSON.stringify(steps.preprocessing, null, 2)}</pre>
@@ -49,6 +55,7 @@ export default function PipelineStepsView({ steps, live = false }) {
             key={ocrStep.engine}
             title={`${steps.text_extraction ? "3" : "2"}. OCR — ${ocrStep.engine}`}
             subtitle={`${ocrStep.char_count} characters`}
+            metricsSubtitle={stepMetricsSubtitle(ocrStep)}
           >
             <pre>{ocrStep.text || "(empty)"}</pre>
           </StepBlock>
@@ -60,6 +67,7 @@ export default function PipelineStepsView({ steps, live = false }) {
             key={`${llmStep.model}-${llmStep.ocr_engine}`}
             title={`${steps.text_extraction ? "4" : "3"}. LLM — ${llmStep.model}`}
             subtitle={`OCR input: ${llmStep.ocr_engine} · tokens: ${llmStep.prompt_tokens ?? "?"} + ${llmStep.completion_tokens ?? "?"}`}
+            metricsSubtitle={stepMetricsSubtitle(llmStep)}
           >
             <h4>Raw model output</h4>
             <pre>{llmStep.raw_output || "(empty)"}</pre>
@@ -72,6 +80,7 @@ export default function PipelineStepsView({ steps, live = false }) {
         <StepBlock
           title="Vision extraction"
           subtitle={`${steps.vision.model} · ${steps.vision.page_count} page(s)`}
+          metricsSubtitle={stepMetricsSubtitle(steps.vision)}
         >
           <pre>{JSON.stringify(steps.vision, null, 2)}</pre>
         </StepBlock>
@@ -90,6 +99,7 @@ export default function PipelineStepsView({ steps, live = false }) {
         <StepBlock
           title="Escalation extraction"
           subtitle={`${steps.escalation.model} · ${steps.escalation.triggers?.join(", ") || "triggered"}`}
+          metricsSubtitle={stepMetricsSubtitle(steps.escalation)}
         >
           <pre>{JSON.stringify(steps.escalation, null, 2)}</pre>
         </StepBlock>
@@ -128,6 +138,7 @@ export default function PipelineStepsView({ steps, live = false }) {
         <StepBlock
           title="Validation"
           subtitle={`confidence: ${steps.validation.confidence || "?"} · review: ${steps.validation.needs_review ? "yes" : "no"}`}
+          metricsSubtitle={stepMetricsSubtitle(steps.validation)}
           defaultOpen={!live}
         >
           <pre>{JSON.stringify(steps.validation, null, 2)}</pre>

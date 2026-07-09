@@ -1,4 +1,6 @@
 import {
+  formatCost,
+  formatDurationSeconds,
   formatElapsed,
   stageIndexFromStages,
 } from "../utils/processing.js";
@@ -13,6 +15,7 @@ export default function ProcessingFeedback({
   filename,
   progressStage,
   progressLabel,
+  metadata,
 }) {
   const pipelineStages = usePipelineStages();
 
@@ -62,6 +65,18 @@ export default function ProcessingFeedback({
             {isServer && (
               <>
                 Elapsed: {formatElapsed(elapsedSeconds)}
+                {metadata?.total_duration_seconds != null && (
+                  <>
+                    {" · "}
+                    Server time: {formatDurationSeconds(metadata.total_duration_seconds)}
+                  </>
+                )}
+                {metadata?.estimated_cost != null && (
+                  <>
+                    {" · "}
+                    Cost so far: {formatCost(metadata.estimated_cost)}
+                  </>
+                )}
                 {" · "}
                 Step outputs appear below as each stage finishes.
               </>

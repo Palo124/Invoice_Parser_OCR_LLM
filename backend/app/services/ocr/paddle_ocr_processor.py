@@ -5,6 +5,9 @@ from typing import Any
 import numpy as np
 from paddleocr import PaddleOCR
 
+from app.config import settings
+from app.services.ocr.layout_reconstruction import layout_text_from_items
+
 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 
 
@@ -15,15 +18,21 @@ def _paddleocr_major_version() -> int:
         return 2
 
 
-def _box_extremes(box: Any) -> tuple[float, float]:
+def _box_bounds(box: Any) -> tuple[float, float, float, float]:
     if box is None:
-        return 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
     points = np.asarray(box, dtype=float)
     if points.ndim == 1 and points.size >= 2:
-        return float(points[0]), float(points[1])
+        x = float(points[0])
+        y = float(points[1])
+        return x, y, x, y
     if points.ndim == 2 and points.shape[1] >= 2:
-        return float(points[:, 0].min()), float(points[:, 1].min())
-    return 0.0, 0.0
+        x_min = float(points[:, 0].min())
+        y_min = float(points[:, 1].min())
+        x_max = float(points[:, 0].max())
+        y_max = float(points[:, 1].max())
+        return x_min, y_min, x_max, y_max
+    return 0.0, 0.0, 0.0, 0.0
 
 
 class PaddleOCRProcessor:
@@ -39,7 +48,6 @@ class PaddleOCRProcessor:
         self._major_version = _paddleocr_major_version()
 
         if self._major_version >= 3:
-            # PaddleOCR 3.x removed show_log/use_gpu from the constructor.
             self.ocr = PaddleOCR(
                 lang=lang,
                 use_doc_orientation_classify=False,
@@ -72,8 +80,8 @@ class PaddleOCRProcessor:
                 text = str(text).strip()
                 if not text:
                     continue
-                x_min, y_min = _box_extremes(poly)
-                items.append({"text": text, "x_min": x_min, "y_min": y_min})
+                x_min, y_min, x_max, _y_max = _box_bounds(poly)
+                items.append({"text": text, "x_min": x_min, "y_min": y_min, "x_max": x_max})
             return items
 
         items = []
@@ -84,49 +92,9 @@ class PaddleOCRProcessor:
                 text = str(text).strip()
                 if not text:
                     continue
-                x_min, y_min = _box_extremes(box)
-                items.append({"text": text, "x_min": x_min, "y_min": y_min})
+                x_min, y_min, x_max, _y_max = _box_bounds(box)
+                items.append({"text": text, "x_min": x_min, "y_min": y_min, "x_max": x_max})
         return items
-
-    def _layout_from_items(self, items: list[dict[str, Any]], threshold: int) -> str:
-        items.sort(key=lambda item: item["y_min"])
-
-        lines: list[list[dict[str, Any]]] = []
-        current_line: list[dict[str, Any]] = []
-        current_y: float | None = None
-
-        for item in items:
-            if current_y is None:
-                current_line = [item]
-                current_y = item["y_min"]
-                continue
-
-            if abs(item["y_min"] - current_y) <= threshold:
-                current_line.append(item)
-            else:
-                lines.append(current_line)
-                current_line = [item]
-                current_y = item["y_min"]
-
-        if current_line:
-            lines.append(current_line)
-
-        output_lines: list[str] = []
-        for line in lines:
-            line.sort(key=lambda item: item["x_min"])
-            line_text = ""
-            prev_x: float | None = None
-
-            for item in line:
-                if prev_x is not None:
-                    gap = max(0, int((item["x_min"] - prev_x) / 10))
-                    line_text += " " * gap
-                line_text += item["text"]
-                prev_x = item["x_min"] + len(item["text"]) * 7
-
-            output_lines.append(line_text)
-
-        return "\n".join(output_lines)
 
     def extract_text_from_pil(self, pil_image) -> str:
         np_image = np.array(pil_image)
@@ -136,4 +104,13 @@ class PaddleOCRProcessor:
     def extract_text_layout_from_pil(self, pil_image, threshold: int) -> str:
         np_image = np.array(pil_image)
         items = self._iter_items(self._run_ocr(np_image))
-        return self._layout_from_items(items, threshold)
+        return layout_text_from_items(
+            items,
+            line_threshold=threshold,
+            page_width=pil_image.size[0],
+            column_split_enabled=settings.ocr_column_split_enabled,
+            column_gap_ratio=settings.ocr_column_gap_ratio,
+            char_width=settings.ocr_layout_char_width,
+            space_divisor=settings.ocr_layout_space_divisor,
+            blank_line_y_multiplier=settings.ocr_layout_blank_line_multiplier,
+        )

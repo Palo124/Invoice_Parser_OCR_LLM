@@ -15,6 +15,11 @@ ocr:
   tesseract_threshold: 15
   paddle_threshold: 15
   pdf_dpi: 300
+  layout_preserve_columns: true
+  layout_column_gap_ratio: 0.12
+  layout_space_divisor: 6
+  layout_char_width: 8
+  layout_blank_line_multiplier: 2.5
 
 llm:
   primary_model: deepseek-ai/DeepSeek-V4-Flash

@@ -11,8 +11,10 @@ import {
 import InvoiceReviewForm from "../components/InvoiceReviewForm.jsx";
 import SourceDocumentPreview from "../components/SourceDocumentPreview.jsx";
 import PipelineStepsView from "../components/PipelineStepsView.jsx";
+import ProcessingCostSummary from "../components/ProcessingCostSummary.jsx";
 import ProcessingFeedback from "../components/ProcessingFeedback.jsx";
 import { useElapsedSeconds, usePollWhen } from "../hooks/useProcessingTimers.js";
+import { formatCost, formatDurationSeconds } from "../utils/processing.js";
 
 export default function InvoiceDetail() {
   const { id } = useParams();
@@ -224,6 +226,7 @@ export default function InvoiceDetail() {
             filename={invoice.original_filename}
             progressStage={progressStage}
             progressLabel={progressLabel}
+            metadata={invoice.metadata}
           />
         )}
 
@@ -246,6 +249,14 @@ export default function InvoiceDetail() {
             </p>
             {invoice.metadata?.vision_used && <p>Vision fallback: used</p>}
             {invoice.metadata?.escalation_used && <p>Escalation model: used</p>}
+            {invoice.metadata?.estimated_cost != null && (
+              <p>
+                Processing cost: <strong>{formatCost(invoice.metadata.estimated_cost)}</strong>
+                {invoice.metadata.total_duration_seconds != null && (
+                  <> · {formatDurationSeconds(invoice.metadata.total_duration_seconds)} total</>
+                )}
+              </p>
+            )}
           </>
         )}
 
@@ -320,6 +331,7 @@ export default function InvoiceDetail() {
       )}
 
       <section className="card">
+        <ProcessingCostSummary metadata={invoice.metadata} live={isProcessing} />
         <PipelineStepsView steps={liveSteps} live={isProcessing} />
 
         {invoice.metadata && !isProcessing && (

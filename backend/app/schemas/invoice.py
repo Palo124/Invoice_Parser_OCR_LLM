@@ -19,6 +19,15 @@ class PipelineStepLLM(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     structured_output: bool | None = None
+    duration_seconds: float | None = None
+    estimated_cost: float | None = None
+
+
+class StepMetricItem(BaseModel):
+    stage: str
+    duration_seconds: float
+    estimated_cost: float
+    model: str | None = None
 
 
 class ValidationErrorItem(BaseModel):
@@ -53,7 +62,9 @@ class PipelineMetadata(BaseModel):
     pipeline_mode: str | None = None
     progress: dict[str, Any] | None = None
     token_usage: dict[str, Any] | None = None
+    total_duration_seconds: float | None = None
     estimated_cost: float | None = None
+    step_metrics: list[StepMetricItem] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
     vision_used: bool | None = None
     vision_triggers: list[str] = Field(default_factory=list)
