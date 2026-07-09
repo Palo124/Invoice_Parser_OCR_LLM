@@ -37,6 +37,9 @@ def _migrate_invoices_table() -> None:
         "raw_text": "ALTER TABLE invoices ADD COLUMN raw_text TEXT",
         "llm_raw_json": "ALTER TABLE invoices ADD COLUMN llm_raw_json TEXT",
         "model_used": "ALTER TABLE invoices ADD COLUMN model_used VARCHAR(128)",
+        "flags_json": "ALTER TABLE invoices ADD COLUMN flags_json TEXT",
+        "validation_errors_json": "ALTER TABLE invoices ADD COLUMN validation_errors_json TEXT",
+        "review_status": "ALTER TABLE invoices ADD COLUMN review_status VARCHAR(32)",
     }
 
     with engine.begin() as connection:

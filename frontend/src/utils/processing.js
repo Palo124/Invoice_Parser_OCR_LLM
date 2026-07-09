@@ -20,6 +20,9 @@ export function stageIndexFromStages(stages, progressStage) {
   if (progressStage.startsWith("llm:")) {
     return stages.findIndex((stage) => stage.id === "llm:deepseek");
   }
+  if (progressStage === "validation") {
+    return stages.findIndex((stage) => stage.id === "validation");
+  }
 
   return 0;
 }

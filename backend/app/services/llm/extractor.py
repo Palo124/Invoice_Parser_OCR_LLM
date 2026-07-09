@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 from app.config import settings
-from app.schemas.invoice_data import InvoiceData
 from app.services.llm.deepinfra import DeepInfraClient
 from app.services.llm.json_extractor import JSONExtractor
 from app.services.llm.prompt import build_messages, get_invoice_json_schema
@@ -16,7 +15,6 @@ class LLMCompletionResult:
     completion_tokens: int
     estimated_cost: float
     structured_output: bool
-    validation_warnings: list[str]
 
 
 class InvoiceLLMExtractor:
@@ -33,7 +31,7 @@ class InvoiceLLMExtractor:
         messages = build_messages(filename, source_text)
         response = self._call_with_fallback(messages)
         content = response.choices[0].message.content or ""
-        parsed, warnings = self._parse_and_validate(content)
+        parsed = self._parse_json(content)
         if not parsed.get("original_filename"):
             parsed["original_filename"] = filename
         if not parsed.get("source"):
@@ -48,7 +46,6 @@ class InvoiceLLMExtractor:
             completion_tokens=usage.completion_tokens,
             estimated_cost=getattr(usage, "estimated_cost", 0.0),
             structured_output=settings.llm_use_structured_output,
-            validation_warnings=warnings,
         )
 
     def _call_with_fallback(self, messages: list[dict]):
@@ -66,16 +63,8 @@ class InvoiceLLMExtractor:
             except Exception:
                 return self.client.get_chat_completion(messages)
 
-    def _parse_and_validate(self, content: str) -> tuple[dict, list[str]]:
-        warnings: list[str] = []
+    def _parse_json(self, content: str) -> dict:
         try:
-            parsed = JSONExtractor.extract_json(content, sanitize=False)
+            return JSONExtractor.extract_json(content, sanitize=False)
         except ValueError as exc:
             raise ValueError(f"Failed to parse LLM JSON output: {exc}") from exc
-
-        try:
-            validated = InvoiceData.model_validate(parsed)
-            return validated.to_storage_dict(), warnings
-        except Exception as exc:
-            warnings.append(f"pydantic_validation: {exc}")
-            return parsed, warnings

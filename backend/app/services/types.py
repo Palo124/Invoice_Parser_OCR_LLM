@@ -17,8 +17,6 @@ class TextExtractionResult:
 class ExtractionResult:
     data: dict
     model: str
-    confidence: str = "high"
-    warnings: list[str] = field(default_factory=list)
     raw_output: str = ""
     ocr_engine: str = ""
     prompt_tokens: int | None = None
@@ -38,3 +36,5 @@ class PipelineResult:
     raw_text: str = ""
     llm_raw_json: str = ""
     model_used: str = ""
+    validation_errors: list[dict] = field(default_factory=list)
+    review_status: str | None = None

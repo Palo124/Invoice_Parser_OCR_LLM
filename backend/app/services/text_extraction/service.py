@@ -29,7 +29,6 @@ class TextExtractionBundle:
     page_texts: list[str] = field(default_factory=list)
     confidence: float = 1.0
     ocr_comparison: OCRComparisonResult | None = None
-    flags: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -116,7 +115,6 @@ class TextExtractionService:
             page_texts=tesseract_pages,
             confidence=comparison.similarity,
             ocr_comparison=comparison,
-            flags=comparison.flags.copy(),
             metadata={
                 "text_branch": "ocr_scan",
                 "pymupdf_chars_before_ocr": pymupdf_chars,
@@ -159,7 +157,6 @@ class TextExtractionService:
             page_texts=[tesseract_text],
             confidence=comparison.similarity,
             ocr_comparison=comparison,
-            flags=comparison.flags.copy(),
             metadata={
                 "text_branch": "ocr_image",
                 "ocr_skipped": False,

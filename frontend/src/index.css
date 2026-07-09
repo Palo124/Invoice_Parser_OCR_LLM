@@ -355,3 +355,49 @@ pre {
   border-radius: 12px;
   background: #fff;
 }
+
+.validation-panel {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fffbeb;
+}
+
+.validation-panel h3,
+.validation-panel h4 {
+  margin-top: 0;
+}
+
+.flag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.flag-chip {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 0.85rem;
+}
+
+.flagged-fields-table {
+  margin-top: 0.5rem;
+}
+
+.confidence.high {
+  color: #166534;
+}
+
+.confidence.medium {
+  color: #92400e;
+}
+
+.confidence.low,
+.confidence.failed {
+  color: #991b1b;
+}

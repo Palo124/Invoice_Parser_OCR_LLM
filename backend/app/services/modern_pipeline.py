@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from app.config import settings
 from app.services.exceptions import ProcessingCancelled
 from app.services.llm.extractor import InvoiceLLMExtractor
+from app.services.pipeline_common import finalize_pipeline_result
 from app.services.text_extraction.service import TextExtractionService
 from app.services.types import (
     CancelCheck,
@@ -11,14 +11,16 @@ from app.services.types import (
     ProgressCallback,
     TextExtractionResult,
 )
+from app.services.validation import InvoiceValidationService
 
 
 class ModernPipeline:
-    """Phase 1+2: decision-tree text extraction + single primary LLM extraction."""
+    """Phase 1–3: text extraction, single LLM extraction, validation layer."""
 
     def __init__(self):
         self.text_extractor = TextExtractionService()
         self.llm_extractor = InvoiceLLMExtractor()
+        self.validator = InvoiceValidationService()
 
     def process_file(
         self,
@@ -87,8 +89,6 @@ class ModernPipeline:
         extraction = ExtractionResult(
             data=llm_result.parsed_data,
             model=llm_result.model,
-            confidence="high" if bundle.ocr_comparison is None else bundle.ocr_comparison.agreement,
-            warnings=llm_result.validation_warnings,
             raw_output=llm_result.raw_output,
             ocr_engine=bundle.source,
             prompt_tokens=llm_result.prompt_tokens,
@@ -103,28 +103,31 @@ class ModernPipeline:
                 "prompt_tokens": llm_result.prompt_tokens,
                 "completion_tokens": llm_result.completion_tokens,
                 "structured_output": llm_result.structured_output,
-                "validation_warnings": llm_result.validation_warnings,
             }
         )
 
-        total_tokens = llm_result.prompt_tokens + llm_result.completion_tokens
-        needs_review = bundle.ocr_comparison is not None and bundle.ocr_comparison.agreement == "low"
-        confidence = "high" if not needs_review else "medium"
+        check_cancelled()
+        report("validation")
+        validation = self.validator.validate(
+            llm_result.parsed_data,
+            raw_text=bundle.text,
+            ocr_comparison=bundle.ocr_comparison,
+        )
 
-        return PipelineResult(
+        return finalize_pipeline_result(
             data=llm_result.parsed_data,
             extraction_path=bundle.extraction_path,
-            confidence=confidence,
-            needs_review=needs_review,
-            flags=bundle.flags,
+            validation=validation,
+            steps=steps,
             metadata={
                 "pipeline_mode": "modern",
                 "text_branch": bundle.branch,
-                "token_usage": {"total_tokens": total_tokens},
+                "token_usage": {
+                    "total_tokens": llm_result.prompt_tokens + llm_result.completion_tokens,
+                },
                 "estimated_cost": llm_result.estimated_cost,
                 "models": [llm_result.model],
                 "structured_output": llm_result.structured_output,
-                "steps": steps,
                 **bundle.metadata,
             },
             text_extraction=text_extraction,

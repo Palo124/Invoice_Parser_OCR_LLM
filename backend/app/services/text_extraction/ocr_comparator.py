@@ -9,7 +9,6 @@ class OCRComparisonResult:
     paddle_text: str
     similarity: float
     agreement: str
-    flags: list[str]
 
 
 def _normalize_text(text: str) -> str:
@@ -35,12 +34,10 @@ def compare_ocr_texts(
         similarity = SequenceMatcher(None, left, right).ratio()
 
     agreement = "high" if similarity >= agreement_threshold else "low"
-    flags = ["ocr_conflict"] if agreement == "low" else []
 
     return OCRComparisonResult(
         tesseract_text=tesseract_text,
         paddle_text=paddle_text,
         similarity=round(similarity, 4),
         agreement=agreement,
-        flags=flags,
     )

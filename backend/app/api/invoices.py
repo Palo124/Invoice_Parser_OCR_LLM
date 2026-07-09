@@ -17,8 +17,26 @@ from app.services.invoice_processing import (
     reset_for_reprocess,
     run_invoice_job,
 )
+from app.services.validation import flagged_fields_from_errors
+from app.services.validation.types import ValidationError
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
+
+
+def _parse_json_list(raw: str | None) -> list:
+    if not raw:
+        return []
+    return json.loads(raw)
+
+
+def _validation_errors_for(invoice: Invoice) -> list[dict]:
+    return _parse_json_list(invoice.validation_errors_json)
+
+
+def _flagged_fields_for(invoice: Invoice) -> list[dict]:
+    return flagged_fields_from_errors(
+        [ValidationError(**item) for item in _validation_errors_for(invoice)]
+    )
 
 
 def _build_metadata(invoice: Invoice) -> PipelineMetadata | None:
@@ -26,12 +44,23 @@ def _build_metadata(invoice: Invoice) -> PipelineMetadata | None:
         return None
 
     payload = json.loads(invoice.metadata_json)
-    payload.setdefault("flags", [])
     return PipelineMetadata.model_validate(payload)
 
 
 def _to_summary(invoice: Invoice) -> InvoiceSummary:
-    return InvoiceSummary.model_validate(invoice)
+    return InvoiceSummary(
+        id=invoice.id,
+        original_filename=invoice.original_filename,
+        status=invoice.status,
+        invoice_number=invoice.invoice_number,
+        supplier_name=invoice.supplier_name,
+        extraction_path=invoice.extraction_path,
+        confidence=invoice.confidence,
+        needs_review=invoice.needs_review,
+        flags=_parse_json_list(invoice.flags_json),
+        review_status=invoice.review_status,
+        created_at=invoice.created_at,
+    )
 
 
 def _to_detail(invoice: Invoice) -> InvoiceDetail:
@@ -39,6 +68,8 @@ def _to_detail(invoice: Invoice) -> InvoiceDetail:
     metadata = _build_metadata(invoice)
     if metadata and invoice.extraction_path:
         metadata.pipeline_mode = metadata.pipeline_mode or invoice.extraction_path
+
+    validation_errors = _validation_errors_for(invoice)
 
     return InvoiceDetail(
         **_to_summary(invoice).model_dump(),
@@ -48,6 +79,8 @@ def _to_detail(invoice: Invoice) -> InvoiceDetail:
         raw_text=invoice.raw_text,
         llm_raw_json=invoice.llm_raw_json,
         model_used=invoice.model_used,
+        flagged_fields=_flagged_fields_for(invoice),
+        validation_errors=validation_errors,
     )
 
 

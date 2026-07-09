@@ -23,4 +23,7 @@ class Invoice(Base):
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     llm_raw_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_used: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    flags_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validation_errors_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -21,6 +21,7 @@ STAGE_LABELS = {
     "llm:deepseek": "Extracting with DeepSeek",
     "llm:llama": "Extracting with Llama",
     "tmr": "Merging results (TMR)",
+    "validation": "Running validation checks",
     "complete": "Finished",
     "cancelled": "Cancelled",
 }
@@ -57,12 +58,14 @@ def get_display_stages() -> list[dict[str, str]]:
             "llm:deepseek",
             "llm:llama",
             "tmr",
+            "validation",
         ]
     else:
         order = [
             "text:pymupdf",
             "text:ocr_compare",
             "llm:deepseek",
+            "validation",
         ]
 
     return [
@@ -97,6 +100,9 @@ def reset_for_reprocess(invoice: Invoice) -> None:
     invoice.raw_text = None
     invoice.llm_raw_json = None
     invoice.model_used = None
+    invoice.flags_json = None
+    invoice.validation_errors_json = None
+    invoice.review_status = None
     begin_processing(invoice)
 
 
@@ -112,11 +118,13 @@ def apply_pipeline_result(invoice: Invoice, result) -> None:
     invoice.raw_text = result.raw_text or None
     invoice.llm_raw_json = result.llm_raw_json or None
     invoice.model_used = result.model_used or None
+    invoice.flags_json = json.dumps(result.flags, ensure_ascii=False)
+    invoice.validation_errors_json = json.dumps(result.validation_errors, ensure_ascii=False)
+    invoice.review_status = result.review_status
     invoice.metadata_json = json.dumps(
         {
             **result.metadata,
             "progress": {"stage": "complete", "label": STAGE_LABELS["complete"]},
-            "flags": result.flags,
         },
         ensure_ascii=False,
     )
@@ -142,6 +150,19 @@ def mark_invoice_failed(db: Session, invoice_id: int, message: str) -> None:
     invoice.error_message = message
     invoice.confidence = "failed"
     invoice.needs_review = True
+    invoice.review_status = "pending"
+    invoice.flags_json = json.dumps(["processing_failed"], ensure_ascii=False)
+    invoice.validation_errors_json = json.dumps(
+        [
+            {
+                "field": "pipeline",
+                "code": "processing_failed",
+                "message": message,
+                "severity": "error",
+            }
+        ],
+        ensure_ascii=False,
+    )
     db.commit()
 
 

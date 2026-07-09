@@ -69,8 +69,32 @@ export default function PipelineStepsView({ steps, live = false }) {
         ))}
 
       {steps.tmr?.merged_json && (
-        <StepBlock title={`${steps.text_extraction ? "5" : "4"}. TMR merge`} subtitle="Final merged JSON">
+        <StepBlock
+          title={`${steps.text_extraction ? "5" : "4"}. TMR merge`}
+          subtitle={
+            steps.tmr.disagreements?.length
+              ? `${steps.tmr.disagreements.length} field disagreement(s)`
+              : "Final merged JSON"
+          }
+        >
+          {steps.tmr.disagreements?.length > 0 && (
+            <>
+              <h4>Field disagreements</h4>
+              <pre>{JSON.stringify(steps.tmr.disagreements, null, 2)}</pre>
+            </>
+          )}
+          <h4>Merged JSON</h4>
           <pre>{JSON.stringify(steps.tmr.merged_json, null, 2)}</pre>
+        </StepBlock>
+      )}
+
+      {steps.validation && (
+        <StepBlock
+          title="Validation"
+          subtitle={`confidence: ${steps.validation.confidence || "?"} · review: ${steps.validation.needs_review ? "yes" : "no"}`}
+          defaultOpen={!live}
+        >
+          <pre>{JSON.stringify(steps.validation, null, 2)}</pre>
         </StepBlock>
       )}
     </section>

@@ -64,6 +64,7 @@ export default function InvoiceList() {
               <th>Supplier</th>
               <th>Status</th>
               <th>Confidence</th>
+              <th>Flags</th>
               <th>Review</th>
             </tr>
           </thead>
@@ -80,6 +81,7 @@ export default function InvoiceList() {
                   <span className={`status ${invoice.status}`}>{invoice.status}</span>
                 </td>
                 <td>{invoice.confidence || "-"}</td>
+                <td>{invoice.flags?.length ? invoice.flags.join(", ") : "-"}</td>
                 <td>{invoice.needs_review ? "yes" : "no"}</td>
               </tr>
             ))}

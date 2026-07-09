@@ -5,14 +5,14 @@ from PIL import Image
 
 from app.config import settings
 from app.services.exceptions import ProcessingCancelled
-from app.services.llm.deepinfra import DeepInfraClient
-from app.services.llm.json_extractor import JSONExtractor
-from app.services.llm.prompt import get_prompt
-from app.services.merge.tmr import triple_modular_redundancy
+from app.services.llm.extractor import InvoiceLLMExtractor
+from app.services.merge.tmr import merge_extractions_with_flags
 from app.services.ocr.paddle_ocr_processor import PaddleOCRProcessor
 from app.services.ocr.pytesseract_ocr_processor import PytesseractOCRProcessor
+from app.services.pipeline_common import finalize_pipeline_result
 from app.services.preprocessing.deskew import ImageDeskewer
 from app.services.preprocessing.pdf_converter import PDFToImageConverter
+from app.services.text_extraction.ocr_comparator import compare_ocr_texts
 from app.services.types import (
     CancelCheck,
     ExtractionResult,
@@ -20,10 +20,11 @@ from app.services.types import (
     ProgressCallback,
     TextExtractionResult,
 )
+from app.services.validation import InvoiceValidationService
 
 
 class LegacyPipeline:
-    """Legacy 2x OCR + 2x LLM + TMR pipeline (kept behind LEGACY_PIPELINE)."""
+    """Legacy 2x OCR + 2x LLM + field-level merge pipeline (kept behind LEGACY_PIPELINE)."""
 
     def __init__(self):
         if not settings.deepinfra_api_key:
@@ -37,14 +38,9 @@ class LegacyPipeline:
             tesseract_cmd=settings.tesseract_cmd,
             lang=settings.ocr_tesseract_lang,
         )
-        self.llm_deepseek = DeepInfraClient(
-            settings.deepinfra_api_key,
-            settings.llm_deepseek_model,
-        )
-        self.llm_llama = DeepInfraClient(
-            settings.deepinfra_api_key,
-            settings.llm_llama_model,
-        )
+        self.llm_deepseek = InvoiceLLMExtractor(model=settings.llm_deepseek_model)
+        self.llm_llama = InvoiceLLMExtractor(model=settings.llm_llama_model)
+        self.validator = InvoiceValidationService()
 
     def _load_images(self, file_path: Path) -> tuple[list[np.ndarray], str]:
         ext = file_path.suffix.lower()
@@ -74,10 +70,6 @@ class LegacyPipeline:
             pil_image = Image.fromarray(page)
             page_texts.append(extract_fn(pil_image, threshold))
         return "\n".join(page_texts)
-
-    def _call_llm(self, client: DeepInfraClient, filename: str, ocr_text: str):
-        prompt = [{"role": "user", "content": get_prompt(filename, ocr_text)}]
-        return client.get_chat_completion(prompt, temperature=0.0)
 
     def _ocr_step(self, engine: str, text: str) -> dict:
         return {
@@ -132,80 +124,89 @@ class LegacyPipeline:
         steps["ocr"].append(self._ocr_step("paddleocr", text_paddle))
         report("ocr:paddleocr")
 
+        ocr_comparison = compare_ocr_texts(
+            text_tesseract,
+            text_paddle,
+            agreement_threshold=settings.ocr_agreement_threshold,
+        )
+        steps["ocr_comparison"] = {
+            "similarity": ocr_comparison.similarity,
+            "agreement": ocr_comparison.agreement,
+        }
+
         text_extraction = TextExtractionResult(
             text="\n\n--- TESSERACT ---\n\n".join([text_tesseract, text_paddle]),
             source="legacy:tesseract+paddle",
             confidence=1.0,
         )
 
-        llm_clients = [
-            (self.llm_deepseek, settings.llm_deepseek_model, "tesseract", text_tesseract, "llm:deepseek"),
-            (self.llm_llama, settings.llm_llama_model, "paddleocr", text_paddle, "llm:llama"),
+        llm_jobs = [
+            (self.llm_deepseek, "tesseract", text_tesseract, "llm:deepseek"),
+            (self.llm_llama, "paddleocr", text_paddle, "llm:llama"),
         ]
 
-        responses = []
         extractions: list[ExtractionResult] = []
+        total_tokens = 0
+        total_cost = 0.0
 
-        for client, model_name, ocr_engine, ocr_text, progress_stage in llm_clients:
+        for llm_extractor, ocr_engine, ocr_text, progress_stage in llm_jobs:
             check_cancelled()
-            response = self._call_llm(client, filename, ocr_text)
-            responses.append(response)
-            content = response.choices[0].message.content or ""
-            parsed = JSONExtractor.extract_json(content)
-            prompt_tokens = response.usage.prompt_tokens
-            completion_tokens = response.usage.completion_tokens
+            llm_result = llm_extractor.extract(filename, ocr_text, ocr_engine)
+            total_tokens += llm_result.prompt_tokens + llm_result.completion_tokens
+            total_cost += llm_result.estimated_cost
 
             extractions.append(
                 ExtractionResult(
-                    data=parsed,
-                    model=model_name,
-                    confidence=settings.default_confidence,
-                    raw_output=content,
+                    data=llm_result.parsed_data,
+                    model=llm_result.model,
+                    raw_output=llm_result.raw_output,
                     ocr_engine=ocr_engine,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
+                    prompt_tokens=llm_result.prompt_tokens,
+                    completion_tokens=llm_result.completion_tokens,
                 )
             )
             steps["llm"].append(
                 {
-                    "model": model_name,
+                    "model": llm_result.model,
                     "ocr_engine": ocr_engine,
-                    "raw_output": content,
-                    "parsed_json": parsed,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
+                    "raw_output": llm_result.raw_output,
+                    "parsed_json": llm_result.parsed_data,
+                    "prompt_tokens": llm_result.prompt_tokens,
+                    "completion_tokens": llm_result.completion_tokens,
+                    "structured_output": llm_result.structured_output,
                 }
             )
             report(progress_stage)
 
-        merged = triple_modular_redundancy(
+        merge_result = merge_extractions_with_flags(
             extractions[0].data,
             extractions[1].data,
-            extractions[1].data,
         )
-        steps["tmr"] = {"merged_json": merged}
+        steps["tmr"] = {
+            "merged_json": merge_result.merged,
+            "disagreements": [error.to_dict() for error in merge_result.disagreements],
+        }
         report("tmr")
 
-        total_tokens = sum(
-            response.usage.prompt_tokens + response.usage.completion_tokens
-            for response in responses
-        )
-        total_cost = sum(
-            getattr(response.usage, "estimated_cost", 0.0) for response in responses
+        check_cancelled()
+        report("validation")
+        validation = self.validator.validate(
+            merge_result.merged,
+            raw_text=text_extraction.text,
+            ocr_comparison=ocr_comparison,
+            merge_disagreements=merge_result.disagreements,
         )
 
-        return PipelineResult(
-            data=merged,
+        return finalize_pipeline_result(
+            data=merge_result.merged,
             extraction_path=settings.legacy_extraction_path,
-            confidence=settings.default_confidence,
-            needs_review=False,
-            flags=[],
+            validation=validation,
+            steps=steps,
             metadata={
                 "pipeline_mode": "legacy",
                 "token_usage": {"total_tokens": total_tokens},
                 "estimated_cost": total_cost,
                 "models": [item.model for item in extractions],
-                "steps": steps,
             },
             text_extraction=text_extraction,
             extractions=extractions,

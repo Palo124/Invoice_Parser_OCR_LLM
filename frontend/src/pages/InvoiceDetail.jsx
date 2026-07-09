@@ -154,9 +154,56 @@ export default function InvoiceDetail() {
       {!isProcessing && (
         <>
           <p>Extraction path: {invoice.extraction_path || "-"}</p>
-          <p>Confidence: {invoice.confidence || "-"}</p>
+          <p>
+            Confidence:{" "}
+            <span className={`confidence ${invoice.confidence || "unknown"}`}>
+              {invoice.confidence || "-"}
+            </span>
+          </p>
           <p>Needs review: {invoice.needs_review ? "yes" : "no"}</p>
+          {invoice.review_status && <p>Review status: {invoice.review_status}</p>}
         </>
+      )}
+
+      {!isProcessing && (invoice.flags?.length > 0 || invoice.flagged_fields?.length > 0) && (
+        <section className="validation-panel">
+          <h3>Validation flags</h3>
+          {invoice.flags?.length > 0 && (
+            <div className="flag-list">
+              {invoice.flags.map((flag) => (
+                <span key={flag} className="flag-chip">
+                  {flag}
+                </span>
+              ))}
+            </div>
+          )}
+          {invoice.flagged_fields?.length > 0 && (
+            <table className="flagged-fields-table">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Flag</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.flagged_fields.map((item) => (
+                  <tr key={`${item.field}-${item.flag}`}>
+                    <td>{item.field}</td>
+                    <td>{item.flag}</td>
+                    <td>{item.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {invoice.validation_errors?.length > 0 && (
+            <>
+              <h4>Validation errors</h4>
+              <pre>{JSON.stringify(invoice.validation_errors, null, 2)}</pre>
+            </>
+          )}
+        </section>
       )}
 
       {htmlPreviewUrl && !isProcessing && (

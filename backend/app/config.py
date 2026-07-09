@@ -33,6 +33,8 @@ _ocr = _yaml.get("ocr", {})
 _llm = _yaml.get("llm", {})
 _text = _yaml.get("text_extraction", {})
 
+_validation = _yaml.get("validation", {})
+
 
 class Settings:
     deepinfra_api_key: str = os.getenv("DEEPINFRA_API_KEY", "")
@@ -75,6 +77,8 @@ class Settings:
         "maverick_model",
         "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     )
+
+    validation_totals_tolerance: float = float(_validation.get("totals_tolerance", 1.0))
 
 
 settings = Settings()

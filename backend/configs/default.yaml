@@ -25,3 +25,6 @@ llm:
   deepseek_model: deepseek-ai/DeepSeek-V4-Flash
   llama_model: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
   maverick_model: meta-llama/Llama-4-Scout-17B-16E-Instruct
+
+validation:
+  totals_tolerance: 1.0
