@@ -29,6 +29,7 @@ class PipelineSteps(BaseModel):
 
 class PipelineMetadata(BaseModel):
     pipeline_mode: str | None = None
+    progress: dict[str, Any] | None = None
     token_usage: dict[str, Any] | None = None
     estimated_cost: float | None = None
     models: list[str] = Field(default_factory=list)

@@ -1,52 +1,54 @@
-# picture_rotation.py
+import math
+
 import cv2
 import numpy as np
-import math
+from PIL import Image
+
+
+def _to_bgr(image) -> np.ndarray:
+    """Normalize PIL or NumPy images to a 3-channel BGR array for OpenCV."""
+    if hasattr(image, "mode"):
+        return cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2BGR)
+
+    array = np.asarray(image)
+    if array.ndim == 2:
+        return cv2.cvtColor(array, cv2.COLOR_GRAY2BGR)
+    if array.ndim == 3 and array.shape[2] == 1:
+        return cv2.cvtColor(array[:, :, 0], cv2.COLOR_GRAY2BGR)
+    if array.ndim == 3 and array.shape[2] == 4:
+        return cv2.cvtColor(array, cv2.COLOR_RGBA2BGR)
+    if array.ndim == 3 and array.shape[2] == 3:
+        return cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
+
+    raise ValueError(f"Unsupported image shape: {array.shape}")
+
 
 class ImageDeskewer:
     def __init__(self, image):
-        """
-        Initialize with an image, which can be either a NumPy array or a PIL Image.
-        If a PIL Image is provided, it is converted to a NumPy array in BGR format.
-        """
-        # Check if the image is a PIL Image by looking for the 'mode' attribute.
-        if hasattr(image, "mode"):
-            # Convert PIL Image (RGB) to a NumPy array in BGR color space.
-            image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        elif not isinstance(image, np.ndarray):
-            # Attempt to convert to a NumPy array if not already.
-            image = np.array(image)
-
-        if image is None or image.size == 0:
+        if image is None or (isinstance(image, np.ndarray) and image.size == 0):
             raise ValueError("Error: Provided image is None or empty")
-        self.image = image
+
+        self.image = _to_bgr(image)
 
     def _preprocess(self):
-        """
-        Convert the image to grayscale, apply Gaussian blur, and detect edges.
-        """
         gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blur, 50, 200, apertureSize=3)
-        return edges
+        return cv2.Canny(blur, 50, 200, apertureSize=3)
 
     def _detect_lines(self, edges):
-        """
-        Use the Hough Transform to detect lines in the edge map.
-        """
         lines = cv2.HoughLinesP(
-            edges, 1, np.pi / 180, threshold=100,
-            minLineLength=100, maxLineGap=10
+            edges,
+            1,
+            np.pi / 180,
+            threshold=100,
+            minLineLength=100,
+            maxLineGap=10,
         )
         if lines is None:
             raise ValueError("No lines detected - unable to deskew")
         return lines
 
     def _calculate_median_angle(self, lines):
-        """
-        Calculate the median angle from the detected lines.
-        Only near-horizontal lines (absolute angle less than 45 degrees) are considered.
-        """
         angles = []
         for line in lines:
             x1, y1, x2, y2 = line[0]
@@ -55,29 +57,28 @@ class ImageDeskewer:
                 angles.append(angle)
         if not angles:
             raise ValueError("No valid angles found - unable to deskew")
-        median_angle = np.median(angles)
-        return median_angle
+        return np.median(angles)
 
     def deskew(self):
-        """
-        Deskews the image by rotating it based on the median angle of the detected lines.
-        Returns the deskewed image and the median angle used.
-        """
         edges = self._preprocess()
         lines = self._detect_lines(edges)
         median_angle = self._calculate_median_angle(lines)
 
-        (h, w) = self.image.shape[:2]
-        center = (w // 2, h // 2)
-        M = cv2.getRotationMatrix2D(center, median_angle, 1.0)
-        rotated = cv2.warpAffine(
-            self.image, M, (w, h),
-            flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+        height, width = self.image.shape[:2]
+        center = (width // 2, height // 2)
+        matrix = cv2.getRotationMatrix2D(center, median_angle, 1.0)
+        rotated_bgr = cv2.warpAffine(
+            self.image,
+            matrix,
+            (width, height),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
         )
-        return rotated, median_angle
+        rotated_rgb = cv2.cvtColor(rotated_bgr, cv2.COLOR_BGR2RGB)
+        return rotated_rgb, median_angle
 
     def save_image(self, output_path, image):
-        """
-        Save the processed image to the specified output path.
-        """
+        if isinstance(image, np.ndarray):
+            Image.fromarray(image).save(output_path)
+            return
         cv2.imwrite(output_path, image)

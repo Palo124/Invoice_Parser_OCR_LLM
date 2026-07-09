@@ -1,5 +1,9 @@
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
+
+
+ProgressCallback = Callable[[str, dict[str, Any]], None]
+CancelCheck = Callable[[], bool]
 
 
 @dataclass

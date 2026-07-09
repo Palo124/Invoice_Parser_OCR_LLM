@@ -13,7 +13,8 @@ from app.services.ocr.paddle_ocr_processor import PaddleOCRProcessor
 from app.services.ocr.pytesseract_ocr_processor import PytesseractOCRProcessor
 from app.services.preprocessing.deskew import ImageDeskewer
 from app.services.preprocessing.pdf_converter import PDFToImageConverter
-from app.services.types import ExtractionResult, PipelineResult, TextExtractionResult
+from app.services.exceptions import ProcessingCancelled
+from app.services.types import ExtractionResult, PipelineResult, ProgressCallback, CancelCheck, TextExtractionResult
 
 
 class LegacyPipeline:
@@ -53,48 +54,34 @@ class LegacyPipeline:
         if ext == ".pdf":
             converter = PDFToImageConverter(poppler_path=None)
             pages = converter.convert_pdf_to_images(str(file_path), dpi=settings.ocr_pdf_dpi)
-            return [np.array(page) for page in pages], "pdf"
+            return [np.array(page.convert("RGB")) for page in pages], "pdf"
         if ext in {".png", ".jpg", ".jpeg"}:
-            return [np.array(Image.open(file_path))], "image"
+            with Image.open(file_path) as img:
+                return [np.array(img.convert("RGB"))], "image"
         raise ValueError("Unsupported file format. Use PDF, PNG, or JPEG.")
 
-    def _ocr_pages(self, images: list[np.ndarray]) -> tuple[str, str, str]:
-        texts_tesseract: list[str] = []
-        texts_paddle: list[str] = []
-        texts_easy: list[str] = []
-
+    def _deskew_pages(self, images: list[np.ndarray]) -> list[np.ndarray]:
+        deskewed: list[np.ndarray] = []
         for image in images:
             try:
                 deskewer = ImageDeskewer(image)
                 rotated_image, _ = deskewer.deskew()
             except ValueError:
                 rotated_image = image
+            deskewed.append(rotated_image)
+        return deskewed
 
-            pil_image = Image.fromarray(rotated_image)
-            texts_tesseract.append(
-                self.ocr_tesseract.extract_text_layout_from_pil(
-                    pil_image,
-                    threshold=settings.ocr_tesseract_threshold,
-                )
-            )
-            texts_paddle.append(
-                self.ocr_paddle.extract_text_layout_from_pil(
-                    pil_image,
-                    threshold=settings.ocr_paddle_threshold,
-                )
-            )
-            texts_easy.append(
-                self.ocr_easy.image_to_text_layout(
-                    pil_image,
-                    threshold=settings.ocr_easyocr_threshold,
-                )
-            )
-
-        return (
-            "\n".join(texts_tesseract),
-            "\n".join(texts_paddle),
-            "\n".join(texts_easy),
-        )
+    def _run_ocr_engine(
+        self,
+        pages: list[np.ndarray],
+        extract_fn,
+        threshold: int,
+    ) -> str:
+        page_texts: list[str] = []
+        for page in pages:
+            pil_image = Image.fromarray(page)
+            page_texts.append(extract_fn(pil_image, threshold))
+        return "\n".join(page_texts)
 
     def _call_llm(self, client: DeepInfraClient, filename: str, ocr_text: str):
         prompt = [{"role": "user", "content": get_prompt(filename, ocr_text)}]
@@ -108,16 +95,62 @@ class LegacyPipeline:
             "preview": text[:500] + ("…" if len(text) > 500 else ""),
         }
 
-    def process_file(self, file_path: Path) -> PipelineResult:
+    def process_file(
+        self,
+        file_path: Path,
+        on_progress: ProgressCallback | None = None,
+        should_cancel: CancelCheck | None = None,
+    ) -> PipelineResult:
         filename = file_path.name
-        images, source_type = self._load_images(file_path)
-        text_tesseract, text_paddle, text_easy = self._ocr_pages(images)
+        steps: dict = {"ocr": [], "llm": []}
 
-        ocr_steps = [
-            self._ocr_step("tesseract", text_tesseract),
-            self._ocr_step("paddleocr", text_paddle),
-            self._ocr_step("easyocr", text_easy),
-        ]
+        def check_cancelled() -> None:
+            if should_cancel and should_cancel():
+                raise ProcessingCancelled()
+
+        def report(stage: str) -> None:
+            check_cancelled()
+            if on_progress:
+                on_progress(stage, steps)
+
+        check_cancelled()
+        images, source_type = self._load_images(file_path)
+        steps["preprocessing"] = {
+            "source_type": source_type,
+            "page_count": len(images),
+            "deskew": True,
+        }
+        report("preprocessing")
+
+        check_cancelled()
+        deskewed_pages = self._deskew_pages(images)
+
+        check_cancelled()
+        text_tesseract = self._run_ocr_engine(
+            deskewed_pages,
+            self.ocr_tesseract.extract_text_layout_from_pil,
+            settings.ocr_tesseract_threshold,
+        )
+        steps["ocr"].append(self._ocr_step("tesseract", text_tesseract))
+        report("ocr:tesseract")
+
+        check_cancelled()
+        text_paddle = self._run_ocr_engine(
+            deskewed_pages,
+            self.ocr_paddle.extract_text_layout_from_pil,
+            settings.ocr_paddle_threshold,
+        )
+        steps["ocr"].append(self._ocr_step("paddleocr", text_paddle))
+        report("ocr:paddleocr")
+
+        check_cancelled()
+        text_easy = self._run_ocr_engine(
+            deskewed_pages,
+            self.ocr_easy.image_to_text_layout,
+            settings.ocr_easyocr_threshold,
+        )
+        steps["ocr"].append(self._ocr_step("easyocr", text_easy))
+        report("ocr:easyocr")
 
         combined_text = "\n\n--- TESSERACT ---\n\n".join(
             [text_tesseract, text_paddle, text_easy]
@@ -129,16 +162,16 @@ class LegacyPipeline:
         )
 
         llm_clients = [
-            (self.llm_deepseek, settings.llm_deepseek_model, "tesseract", text_tesseract),
-            (self.llm_llama, settings.llm_llama_model, "paddleocr", text_paddle),
-            (self.llm_maverick, settings.llm_maverick_model, "easyocr", text_easy),
+            (self.llm_deepseek, settings.llm_deepseek_model, "tesseract", text_tesseract, "llm:deepseek"),
+            (self.llm_llama, settings.llm_llama_model, "paddleocr", text_paddle, "llm:llama"),
+            (self.llm_maverick, settings.llm_maverick_model, "easyocr", text_easy, "llm:maverick"),
         ]
 
         responses = []
         extractions: list[ExtractionResult] = []
-        llm_steps = []
 
-        for client, model_name, ocr_engine, ocr_text in llm_clients:
+        for client, model_name, ocr_engine, ocr_text, progress_stage in llm_clients:
+            check_cancelled()
             response = self._call_llm(client, filename, ocr_text)
             responses.append(response)
             content = response.choices[0].message.content or ""
@@ -157,7 +190,7 @@ class LegacyPipeline:
                     completion_tokens=completion_tokens,
                 )
             )
-            llm_steps.append(
+            steps["llm"].append(
                 {
                     "model": model_name,
                     "ocr_engine": ocr_engine,
@@ -167,12 +200,15 @@ class LegacyPipeline:
                     "completion_tokens": completion_tokens,
                 }
             )
+            report(progress_stage)
 
         merged = triple_modular_redundancy(
             extractions[0].data,
             extractions[1].data,
             extractions[2].data,
         )
+        steps["tmr"] = {"merged_json": merged}
+        report("tmr")
 
         total_tokens = sum(
             response.usage.prompt_tokens + response.usage.completion_tokens
@@ -181,17 +217,6 @@ class LegacyPipeline:
         total_cost = sum(
             getattr(response.usage, "estimated_cost", 0.0) for response in responses
         )
-
-        steps = {
-            "preprocessing": {
-                "source_type": source_type,
-                "page_count": len(images),
-                "deskew": True,
-            },
-            "ocr": ocr_steps,
-            "llm": llm_steps,
-            "tmr": {"merged_json": merged},
-        }
 
         return PipelineResult(
             data=merged,

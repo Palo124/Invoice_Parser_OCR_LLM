@@ -1,21 +1,22 @@
-export const PROCESSING_STAGES = [
-  "Uploading file to server",
-  "Converting PDF and preparing pages",
-  "Running OCR (Tesseract, PaddleOCR, EasyOCR)",
-  "Extracting structured data with LLMs",
-  "Merging results and saving to database",
-];
-
 export function formatElapsed(seconds) {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function stageIndexForElapsed(seconds, uploadDone) {
-  if (!uploadDone) return 0;
-  if (seconds < 10) return 1;
-  if (seconds < 40) return 2;
-  if (seconds < 90) return 3;
-  return 4;
+export function stageIndexFromStages(stages, progressStage) {
+  if (!stages.length) return 0;
+  if (!progressStage || progressStage === "queued") return 0;
+
+  const index = stages.findIndex((stage) => stage.id === progressStage);
+  if (index >= 0) return index;
+
+  if (progressStage.startsWith("ocr:")) {
+    return stages.findIndex((stage) => stage.id === "ocr:tesseract");
+  }
+  if (progressStage.startsWith("llm:")) {
+    return stages.findIndex((stage) => stage.id === "llm:deepseek");
+  }
+
+  return 0;
 }

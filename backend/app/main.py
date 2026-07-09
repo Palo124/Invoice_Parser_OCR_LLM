@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.invoices import router as invoices_router
+from app.api.pipeline import router as pipeline_router
 from app.config import settings
 from app.db import init_db
 
@@ -16,6 +17,7 @@ app.add_middleware(
 )
 
 app.include_router(invoices_router, prefix="/api")
+app.include_router(pipeline_router, prefix="/api")
 
 
 @app.on_event("startup")

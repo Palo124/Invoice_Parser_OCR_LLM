@@ -10,18 +10,18 @@ function StepBlock({ title, subtitle, defaultOpen = false, children }) {
   );
 }
 
-export default function PipelineStepsView({ steps }) {
-  if (!steps) return null;
+export default function PipelineStepsView({ steps, live = false }) {
+  if (!steps || Object.keys(steps).length === 0) return null;
 
   return (
     <section className="steps-panel">
-      <h3>Pipeline step outputs</h3>
+      <h3>{live ? "Live pipeline outputs" : "Pipeline step outputs"}</h3>
 
       {steps.preprocessing && (
         <StepBlock
           title="1. Preprocessing"
           subtitle={`${steps.preprocessing.page_count} page(s) · ${steps.preprocessing.source_type}`}
-          defaultOpen
+          defaultOpen={live}
         >
           <pre>{JSON.stringify(steps.preprocessing, null, 2)}</pre>
         </StepBlock>

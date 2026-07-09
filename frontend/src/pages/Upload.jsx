@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { uploadInvoice } from "../api/client.js";
 import ProcessingFeedback from "../components/ProcessingFeedback.jsx";
@@ -8,20 +8,8 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadDone, setUploadDone] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!loading) return undefined;
-
-    const startedAt = Date.now();
-    const timer = window.setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [loading]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -30,7 +18,6 @@ export default function Upload() {
     setLoading(true);
     setUploadProgress(0);
     setUploadDone(false);
-    setElapsedSeconds(0);
     setError("");
 
     try {
@@ -70,9 +57,9 @@ export default function Upload() {
 
       <ProcessingFeedback
         active={loading}
+        mode="upload"
         uploadProgress={uploadProgress}
         uploadDone={uploadDone}
-        elapsedSeconds={elapsedSeconds}
         filename={file?.name}
       />
 

@@ -2,7 +2,7 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,12 @@ from app.db import get_db
 from app.models.invoice import Invoice
 from app.schemas.invoice import InvoiceDetail, InvoiceSummary, PipelineMetadata
 from app.services.generation.html_renderer import render_invoice_html
-from app.services.pipeline import InvoicePipeline
+from app.services.invoice_processing import (
+    begin_processing,
+    cancel_invoice_processing,
+    reset_for_reprocess,
+    run_invoice_job,
+)
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -36,34 +41,35 @@ def _to_detail(invoice: Invoice) -> InvoiceDetail:
         metadata.pipeline_mode = metadata.pipeline_mode or invoice.extraction_path
 
     return InvoiceDetail(
-        id=invoice.id,
-        original_filename=invoice.original_filename,
-        status=invoice.status,
-        invoice_number=invoice.invoice_number,
-        supplier_name=invoice.supplier_name,
-        extraction_path=invoice.extraction_path,
-        confidence=invoice.confidence,
-        needs_review=invoice.needs_review,
-        created_at=invoice.created_at,
+        **_to_summary(invoice).model_dump(),
         data=data,
         error_message=invoice.error_message,
         metadata=metadata,
     )
 
 
-def _apply_pipeline_result(invoice: Invoice, result) -> None:
-    supplier = result.data.get("supplier") or {}
-    invoice.status = "completed"
-    invoice.invoice_number = result.data.get("invoice_number")
-    invoice.supplier_name = supplier.get("name")
-    invoice.data_json = json.dumps(result.data, ensure_ascii=False)
-    invoice.extraction_path = result.extraction_path
-    invoice.confidence = result.confidence
-    invoice.needs_review = result.needs_review
-    invoice.metadata_json = json.dumps(
-        {**result.metadata, "flags": result.flags},
-        ensure_ascii=False,
-    )
+def _get_invoice_or_404(invoice_id: int, db: Session) -> Invoice:
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice
+
+
+def _upload_path_for(invoice: Invoice) -> Path:
+    exact = settings.upload_dir / f"{invoice.id}_{invoice.original_filename}"
+    if exact.exists():
+        return exact
+
+    matches = list(settings.upload_dir.glob(f"{invoice.id}_*"))
+    if not matches:
+        raise HTTPException(status_code=404, detail="Original file not found for this invoice")
+    if len(matches) == 1:
+        return matches[0]
+
+    for path in matches:
+        if path.name == exact.name:
+            return path
+    return matches[0]
 
 
 @router.get("", response_model=list[InvoiceSummary])
@@ -74,9 +80,7 @@ def list_invoices(db: Session = Depends(get_db)):
 
 @router.get("/{invoice_id}/html", response_class=HTMLResponse)
 def get_invoice_html(invoice_id: int, db: Session = Depends(get_db)):
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Invoice not found")
+    invoice = _get_invoice_or_404(invoice_id, db)
     if not invoice.data_json:
         raise HTTPException(status_code=400, detail="Invoice has no extracted data")
 
@@ -87,14 +91,43 @@ def get_invoice_html(invoice_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{invoice_id}", response_model=InvoiceDetail)
 def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if not invoice:
+    return _to_detail(_get_invoice_or_404(invoice_id, db))
+
+
+@router.post("/{invoice_id}/cancel", response_model=InvoiceDetail)
+def cancel_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = _get_invoice_or_404(invoice_id, db)
+    if invoice.status != "processing":
+        raise HTTPException(status_code=409, detail="Invoice is not processing")
+
+    cancelled = cancel_invoice_processing(db, invoice_id)
+    if not cancelled:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    return _to_detail(cancelled)
+
+
+@router.post("/{invoice_id}/redo", response_model=InvoiceDetail)
+def redo_invoice(
+    invoice_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    invoice = _get_invoice_or_404(invoice_id, db)
+    if invoice.status == "processing":
+        raise HTTPException(status_code=409, detail="Invoice is already processing")
+
+    saved_path = _upload_path_for(invoice)
+    reset_for_reprocess(invoice)
+    db.commit()
+    db.refresh(invoice)
+
+    background_tasks.add_task(run_invoice_job, invoice.id, saved_path)
     return _to_detail(invoice)
 
 
 @router.post("/upload", response_model=InvoiceDetail)
 async def upload_invoice(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -105,10 +138,7 @@ async def upload_invoice(
     if ext not in {".pdf", ".png", ".jpg", ".jpeg"}:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    invoice = Invoice(
-        original_filename=file.filename,
-        status="processing",
-    )
+    invoice = Invoice(original_filename=file.filename)
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
@@ -117,20 +147,9 @@ async def upload_invoice(
     with saved_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    try:
-        result = InvoicePipeline().process_file(saved_path)
-        _apply_pipeline_result(invoice, result)
-    except NotImplementedError as exc:
-        invoice.status = "failed"
-        invoice.error_message = str(exc)
-        invoice.confidence = "failed"
-        invoice.needs_review = True
-    except Exception as exc:
-        invoice.status = "failed"
-        invoice.error_message = str(exc)
-        invoice.confidence = "failed"
-        invoice.needs_review = True
-
+    begin_processing(invoice)
     db.commit()
     db.refresh(invoice)
+
+    background_tasks.add_task(run_invoice_job, invoice.id, saved_path)
     return _to_detail(invoice)

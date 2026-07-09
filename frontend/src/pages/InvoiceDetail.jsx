@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { fetchInvoice } from "../api/client.js";
+import { cancelInvoice, fetchInvoice, redoInvoice } from "../api/client.js";
 import PipelineStepsView from "../components/PipelineStepsView.jsx";
-import { formatElapsed } from "../utils/processing.js";
+import ProcessingFeedback from "../components/ProcessingFeedback.jsx";
+import { useElapsedSeconds, usePollWhen } from "../hooks/useProcessingTimers.js";
 
 export default function InvoiceDetail() {
   const { id } = useParams();
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState("");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [redoing, setRedoing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,32 +34,63 @@ export default function InvoiceDetail() {
   }, [id]);
 
   const isProcessing = invoice?.status === "processing";
+  const elapsedSeconds = useElapsedSeconds(isProcessing);
   const htmlPreviewUrl = invoice?.data ? `/api/invoices/${id}/html` : null;
+  const progressStage = invoice?.metadata?.progress?.stage;
+  const progressLabel = invoice?.metadata?.progress?.label;
+  const liveSteps = invoice?.metadata?.steps;
 
-  useEffect(() => {
-    if (!isProcessing) return undefined;
+  const pollInvoice = useCallback(async () => {
+    try {
+      const data = await fetchInvoice(id);
+      setInvoice(data);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [id]);
 
-    const startedAt = Date.now();
-    const elapsedTimer = window.setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
+  usePollWhen(isProcessing, pollInvoice);
 
-    const pollTimer = window.setInterval(async () => {
+  async function handleCancel() {
+    if (cancelling || !isProcessing) return;
+
+    setCancelling(true);
+    setError("");
+
+    try {
+      const data = await cancelInvoice(id);
+      setInvoice(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  async function handleRedo() {
+    if (redoing || isProcessing) return;
+
+    setRedoing(true);
+    setError("");
+
+    try {
+      const data = await redoInvoice(id);
+      setInvoice(data);
+    } catch (err) {
+      setError(err.message);
       try {
         const data = await fetchInvoice(id);
         setInvoice(data);
-      } catch (err) {
-        setError(err.message);
+      } catch {
+        // ignore secondary fetch failure
       }
-    }, 3000);
+    } finally {
+      setRedoing(false);
+    }
+  }
 
-    return () => {
-      window.clearInterval(elapsedTimer);
-      window.clearInterval(pollTimer);
-    };
-  }, [id, isProcessing]);
-
-  if (error) {
+  if (error && !invoice) {
     return (
       <section className="card">
         <p className="error">{error}</p>
@@ -79,34 +112,54 @@ export default function InvoiceDetail() {
       <p>
         <Link to="/">← Back to list</Link>
       </p>
-      <h2>{invoice.original_filename}</h2>
+      <div className="detail-header">
+        <h2>{invoice.original_filename}</h2>
+        <div className="detail-actions">
+          {isProcessing ? (
+            <button
+              type="button"
+              className="button-danger"
+              onClick={handleCancel}
+              disabled={cancelling}
+            >
+              {cancelling ? "Cancelling…" : "Cancel processing"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={handleRedo}
+              disabled={redoing}
+            >
+              {redoing ? "Starting redo…" : "Redo extraction"}
+            </button>
+          )}
+        </div>
+      </div>
       <p>
         Status: <span className={`status ${invoice.status}`}>{invoice.status}</span>
       </p>
 
       {isProcessing && (
-        <div className="processing-panel" role="status" aria-live="polite">
-          <div className="processing-header">
-            <div className="spinner" aria-hidden="true" />
-            <div>
-              <strong>Still processing on the server</strong>
-              <div className="processing-meta">
-                Elapsed: {formatElapsed(elapsedSeconds)} · checking for updates…
-              </div>
-            </div>
-          </div>
-          <p className="processing-note">
-            OCR and LLM extraction can take several minutes. This page refreshes
-            automatically.
-          </p>
-        </div>
+        <ProcessingFeedback
+          active
+          mode="server"
+          elapsedSeconds={elapsedSeconds}
+          filename={invoice.original_filename}
+          progressStage={progressStage}
+          progressLabel={progressLabel}
+        />
       )}
 
-      <p>Extraction path: {invoice.extraction_path || "-"}</p>
-      <p>Confidence: {invoice.confidence || "-"}</p>
-      <p>Needs review: {invoice.needs_review ? "yes" : "no"}</p>
+      {!isProcessing && (
+        <>
+          <p>Extraction path: {invoice.extraction_path || "-"}</p>
+          <p>Confidence: {invoice.confidence || "-"}</p>
+          <p>Needs review: {invoice.needs_review ? "yes" : "no"}</p>
+        </>
+      )}
 
-      {htmlPreviewUrl && (
+      {htmlPreviewUrl && !isProcessing && (
         <section className="html-preview-section">
           <div className="html-preview-header">
             <h3>Generated invoice (HTML)</h3>
@@ -122,9 +175,9 @@ export default function InvoiceDetail() {
         </section>
       )}
 
-      <PipelineStepsView steps={invoice.metadata?.steps} />
+      <PipelineStepsView steps={liveSteps} live={isProcessing} />
 
-      {invoice.metadata && (
+      {invoice.metadata && !isProcessing && (
         <details className="step-block">
           <summary>
             <span className="step-title">Run metadata</span>
@@ -136,9 +189,10 @@ export default function InvoiceDetail() {
         </details>
       )}
 
+      {error && <p className="error">{error}</p>}
       {invoice.error_message && <p className="error">{invoice.error_message}</p>}
 
-      {invoice.data && (
+      {invoice.data && !isProcessing && (
         <section className="final-result">
           <h3>Final invoice data (JSON)</h3>
           <pre>{JSON.stringify(invoice.data, null, 2)}</pre>

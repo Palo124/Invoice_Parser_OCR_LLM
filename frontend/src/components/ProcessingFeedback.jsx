@@ -1,31 +1,41 @@
 import {
-  PROCESSING_STAGES,
   formatElapsed,
-  stageIndexForElapsed,
+  stageIndexFromStages,
 } from "../utils/processing.js";
+import { usePipelineStages } from "../hooks/usePipelineStages.js";
 
 export default function ProcessingFeedback({
   active,
-  uploadProgress,
-  uploadDone,
-  elapsedSeconds,
+  mode = "upload",
+  uploadProgress = 0,
+  uploadDone = false,
+  elapsedSeconds = 0,
   filename,
+  progressStage,
+  progressLabel,
 }) {
+  const pipelineStages = usePipelineStages();
+
   if (!active) return null;
 
-  const stageIndex = stageIndexForElapsed(elapsedSeconds, uploadDone);
+  const isUpload = mode === "upload";
+  const isServer = mode === "server";
+  const stageIndex = isServer
+    ? stageIndexFromStages(pipelineStages, progressStage)
+    : 0;
+  const currentLabel = progressLabel || "Processing on server…";
 
   return (
     <div className="processing-panel" role="status" aria-live="polite">
       <div className="processing-header">
         <div className="spinner" aria-hidden="true" />
         <div>
-          <strong>Processing invoice</strong>
+          <strong>{isUpload ? "Uploading invoice" : "Processing invoice"}</strong>
           {filename && <div className="processing-filename">{filename}</div>}
         </div>
       </div>
 
-      {!uploadDone ? (
+      {isUpload && !uploadDone ? (
         <>
           <p className="processing-lead">Uploading file…</p>
           <div className="progress-track">
@@ -39,39 +49,50 @@ export default function ProcessingFeedback({
       ) : (
         <>
           <p className="processing-lead">
-            Server is working — this usually takes 2–5 minutes.
+            {isUpload
+              ? "Upload complete — opening invoice detail…"
+              : `Current step: ${currentLabel}`}
           </p>
-          <div className="progress-track">
-            <div className="progress-bar indeterminate" />
-          </div>
+          {isServer && (
+            <div className="progress-track">
+              <div className="progress-bar indeterminate" />
+            </div>
+          )}
           <p className="processing-meta">
-            Elapsed: {formatElapsed(elapsedSeconds)}
-            {" · "}
-            First run may take longer while OCR models load.
+            {isServer && (
+              <>
+                Elapsed: {formatElapsed(elapsedSeconds)}
+                {" · "}
+                Step outputs appear below as each stage finishes.
+              </>
+            )}
           </p>
         </>
       )}
 
-      <ol className="processing-steps">
-        {PROCESSING_STAGES.map((label, index) => {
-          let state = "pending";
-          if (index < stageIndex) state = "done";
-          if (index === stageIndex) state = "active";
+      {isServer && pipelineStages.length > 0 && (
+        <ol className="processing-steps">
+          {pipelineStages.map((stage, index) => {
+            let state = "pending";
+            if (index < stageIndex) state = "done";
+            if (index === stageIndex) state = "active";
 
-          return (
-            <li key={label} className={`processing-step ${state}`}>
-              <span className="processing-step-icon" aria-hidden="true">
-                {state === "done" ? "✓" : state === "active" ? "…" : "○"}
-              </span>
-              {label}
-            </li>
-          );
-        })}
-      </ol>
+            return (
+              <li key={stage.id} className={`processing-step ${state}`}>
+                <span className="processing-step-icon" aria-hidden="true">
+                  {state === "done" ? "✓" : state === "active" ? "…" : "○"}
+                </span>
+                {stage.label}
+              </li>
+            );
+          })}
+        </ol>
+      )}
 
       <p className="processing-note">
-        Please keep this tab open. The page will redirect when processing
-        finishes.
+        {isUpload
+          ? "Processing continues on the server after upload finishes."
+          : "This page refreshes automatically while extraction runs."}
       </p>
     </div>
   );

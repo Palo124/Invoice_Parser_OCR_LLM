@@ -12,6 +12,49 @@ export async function fetchInvoice(id) {
   return res.json();
 }
 
+export async function cancelInvoice(id) {
+  const res = await fetch(`${API_BASE}/invoices/${id}/cancel`, { method: "POST" });
+  if (!res.ok) {
+    let message = "Failed to cancel processing";
+    try {
+      const err = await res.json();
+      message = err.detail || message;
+    } catch {
+      message = `Failed to cancel processing (${res.status})`;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function redoInvoice(id) {
+  const res = await fetch(`${API_BASE}/invoices/${id}/redo`, { method: "POST" });
+  if (!res.ok) {
+    let message = "Failed to redo extraction";
+    try {
+      const err = await res.json();
+      message = err.detail || message;
+    } catch {
+      message = `Failed to redo extraction (${res.status})`;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+let cachedPipelineStages = null;
+
+export async function fetchPipelineStages() {
+  if (cachedPipelineStages) {
+    return cachedPipelineStages;
+  }
+
+  const res = await fetch(`${API_BASE}/pipeline/stages`);
+  if (!res.ok) throw new Error("Failed to load pipeline stages");
+  cachedPipelineStages = await res.json();
+  return cachedPipelineStages;
+}
+
 export function uploadInvoice(file, callbacks = {}) {
   const { onUploadProgress, onUploadComplete } = callbacks;
 
