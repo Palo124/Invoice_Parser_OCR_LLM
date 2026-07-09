@@ -15,6 +15,10 @@ class ExtractionResult:
     model: str
     confidence: str = "high"
     warnings: list[str] = field(default_factory=list)
+    raw_output: str = ""
+    ocr_engine: str = ""
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
 
 
 @dataclass

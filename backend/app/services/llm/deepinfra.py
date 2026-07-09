@@ -9,8 +9,13 @@ class DeepInfraClient:
             base_url="https://api.deepinfra.com/v1/openai",
         )
 
-    def get_chat_completion(self, messages: list[dict]):
+    def get_chat_completion(self, messages: list[dict], temperature: float = 0.0):
+        cleaned = [
+            {"role": message["role"], "content": message["content"]}
+            for message in messages
+        ]
         return self.client.chat.completions.create(
             model=self.model,
-            messages=messages,
+            messages=cleaned,
+            temperature=temperature,
         )

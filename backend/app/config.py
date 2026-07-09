@@ -58,11 +58,14 @@ class Settings:
     ocr_easyocr_threshold: int = _ocr.get("easyocr_threshold", 30)
     ocr_pdf_dpi: int = _ocr.get("pdf_dpi", 300)
 
-    llm_deepseek_model: str = _llm.get("deepseek_model", "deepseek-ai/DeepSeek-R1")
-    llm_llama_model: str = _llm.get("llama_model", "meta-llama/Llama-3.3-70B-Instruct-Turbo")
+    llm_deepseek_model: str = _llm.get("deepseek_model", "deepseek-ai/DeepSeek-V4-Flash")
+    llm_llama_model: str = _llm.get(
+        "llama_model",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+    )
     llm_maverick_model: str = _llm.get(
         "maverick_model",
-        "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+        "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     )
 
 

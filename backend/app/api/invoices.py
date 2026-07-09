@@ -3,12 +3,14 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
 from app.models.invoice import Invoice
 from app.schemas.invoice import InvoiceDetail, InvoiceSummary, PipelineMetadata
+from app.services.generation.html_renderer import render_invoice_html
 from app.services.pipeline import InvoicePipeline
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -68,6 +70,19 @@ def _apply_pipeline_result(invoice: Invoice, result) -> None:
 def list_invoices(db: Session = Depends(get_db)):
     invoices = db.query(Invoice).order_by(Invoice.created_at.desc()).all()
     return [_to_summary(invoice) for invoice in invoices]
+
+
+@router.get("/{invoice_id}/html", response_class=HTMLResponse)
+def get_invoice_html(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if not invoice.data_json:
+        raise HTTPException(status_code=400, detail="Invoice has no extracted data")
+
+    data = json.loads(invoice.data_json)
+    data.setdefault("original_filename", invoice.original_filename)
+    return HTMLResponse(content=render_invoice_html(data))
 
 
 @router.get("/{invoice_id}", response_model=InvoiceDetail)

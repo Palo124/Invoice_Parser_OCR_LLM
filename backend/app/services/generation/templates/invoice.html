@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Faktura {{ invoice_number or "—" }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: #1f2937;
+      background: #f3f4f6;
+      margin: 0;
+      padding: 2rem;
+    }
+    .invoice {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 2.5rem;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      border-bottom: 3px solid #111827;
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 1.75rem;
+      letter-spacing: 0.04em;
+    }
+    .header .subtitle {
+      color: #6b7280;
+      margin-top: 0.25rem;
+      font-size: 0.95rem;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .meta-grid dt {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      margin-bottom: 0.15rem;
+    }
+    .meta-grid dd {
+      margin: 0;
+      font-weight: 600;
+    }
+    .parties {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .party {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+    }
+    .party h2 {
+      margin: 0 0 0.75rem;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #374151;
+    }
+    .party .name {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+    }
+    .party p {
+      margin: 0.15rem 0;
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+      font-size: 0.92rem;
+    }
+    table.items th {
+      background: #111827;
+      color: #fff;
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      font-weight: 600;
+    }
+    table.items td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 0.65rem 0.75rem;
+      vertical-align: top;
+    }
+    table.items tr:nth-child(even) td {
+      background: #fafafa;
+    }
+    .num { text-align: right; white-space: nowrap; }
+    .totals {
+      margin-left: auto;
+      width: min(100%, 320px);
+    }
+    .totals table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .totals td {
+      padding: 0.45rem 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .totals td:last-child {
+      text-align: right;
+      font-weight: 600;
+    }
+    .totals tr.grand td {
+      border-top: 2px solid #111827;
+      border-bottom: none;
+      font-size: 1.1rem;
+      padding-top: 0.75rem;
+    }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e5e7eb;
+      font-size: 0.9rem;
+      color: #4b5563;
+    }
+    .footer p { margin: 0.35rem 0; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .invoice { box-shadow: none; border: none; border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <article class="invoice">
+    <header class="header">
+      <div>
+        <h1>FAKTURA</h1>
+        <div class="subtitle">Daňový doklad</div>
+      </div>
+      <div class="meta-grid">
+        <div>
+          <dt>Číslo faktury</dt>
+          <dd>{{ invoice_number or "—" }}</dd>
+        </div>
+        <div>
+          <dt>Datum vystavení</dt>
+          <dd>{{ invoice_date or "—" }}</dd>
+        </div>
+        <div>
+          <dt>Datum zdanitelného plnění</dt>
+          <dd>{{ tax_date or "—" }}</dd>
+        </div>
+        <div>
+          <dt>Datum splatnosti</dt>
+          <dd>{{ due_date or "—" }}</dd>
+        </div>
+      </div>
+    </header>
+
+    <section class="parties">
+      <div class="party">
+        <h2>Dodavatel</h2>
+        <div class="name">{{ supplier.name or "—" }}</div>
+        <p>{{ supplier.address or "—" }}</p>
+        <p>IČO: {{ supplier.ico or "—" }}</p>
+        <p>DIČ: {{ supplier.dic or "—" }}</p>
+        {% if supplier.platce_dph is not none %}
+        <p>Plátce DPH: {{ "Ano" if supplier.platce_dph else "Ne" }}</p>
+        {% endif %}
+      </div>
+      <div class="party">
+        <h2>Odběratel</h2>
+        <div class="name">{{ customer.name or "—" }}</div>
+        <p>{{ customer.address or "—" }}</p>
+        <p>IČO: {{ customer.ico or "—" }}</p>
+        <p>DIČ: {{ customer.dic or "—" }}</p>
+      </div>
+    </section>
+
+    <dl class="meta-grid">
+      <div>
+        <dt>Variabilní symbol</dt>
+        <dd>{{ variable_symbol or "—" }}</dd>
+      </div>
+      <div>
+        <dt>Specifický symbol</dt>
+        <dd>{{ specific_symbol or "—" }}</dd>
+      </div>
+      <div>
+        <dt>IBAN</dt>
+        <dd>{{ iban or "—" }}</dd>
+      </div>
+      <div>
+        <dt>SWIFT</dt>
+        <dd>{{ swift or "—" }}</dd>
+      </div>
+      <div>
+        <dt>Forma úhrady</dt>
+        <dd>{{ payment_method or "—" }}</dd>
+      </div>
+    </dl>
+
+    <table class="items">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Popis</th>
+          <th class="num">Množství</th>
+          <th>Jedn.</th>
+          <th class="num">Cena/j.</th>
+          <th class="num">DPH %</th>
+          <th class="num">Bez DPH</th>
+          <th class="num">DPH</th>
+          <th class="num">S DPH</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>{{ item.index or loop.index }}</td>
+          <td>{{ item.description or "—" }}</td>
+          <td class="num">{{ item.quantity or "—" }}</td>
+          <td>{{ item.unit or "—" }}</td>
+          <td class="num">{{ item.unit_price or "—" }}</td>
+          <td class="num">{{ item.tax_rate or "—" }}</td>
+          <td class="num">{{ item.net_amount or "—" }}</td>
+          <td class="num">{{ item.tax_amount or "—" }}</td>
+          <td class="num">{{ item.gross_amount or "—" }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9">Žádné položky</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <table>
+        <tr>
+          <td>Celkem bez DPH</td>
+          <td>{{ net_total or "—" }}</td>
+        </tr>
+        <tr>
+          <td>DPH celkem</td>
+          <td>{{ tax_total or "—" }}</td>
+        </tr>
+        <tr class="grand">
+          <td>Celkem k úhradě</td>
+          <td>{{ gross_total or "—" }}</td>
+        </tr>
+      </table>
+    </div>
+
+    <footer class="footer">
+      {% if notes %}<p><strong>Poznámka:</strong> {{ notes }}</p>{% endif %}
+      {% if contact %}<p><strong>Kontakt:</strong> {{ contact }}</p>{% endif %}
+      {% if original_filename %}<p><strong>Zdrojový soubor:</strong> {{ original_filename }}</p>{% endif %}
+    </footer>
+  </article>
+</body>
+</html>

@@ -5,16 +5,53 @@ import { fetchInvoices } from "../api/client.js";
 export default function InvoiceList() {
   const [invoices, setInvoices] = useState([]);
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function loadInvoices(showRefresh = false) {
+    if (showRefresh) setRefreshing(true);
+    try {
+      const data = await fetchInvoices();
+      setInvoices(data);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
-    fetchInvoices()
-      .then(setInvoices)
-      .catch((err) => setError(err.message));
+    loadInvoices();
   }, []);
+
+  const hasProcessing = invoices.some((invoice) => invoice.status === "processing");
+
+  useEffect(() => {
+    if (!hasProcessing) return undefined;
+
+    const timer = window.setInterval(() => {
+      loadInvoices();
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [hasProcessing]);
 
   return (
     <section className="card">
-      <h2>Invoices</h2>
+      <div className="list-header">
+        <h2>Invoices</h2>
+        <button type="button" onClick={() => loadInvoices(true)} disabled={refreshing}>
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      {hasProcessing && (
+        <p className="processing-banner" role="status">
+          An invoice is still processing on the server. This list refreshes
+          automatically every few seconds.
+        </p>
+      )}
+
       {error && <p className="error">{error}</p>}
       {!error && invoices.length === 0 && <p>No invoices yet.</p>}
       {invoices.length > 0 && (
