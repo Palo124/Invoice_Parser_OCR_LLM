@@ -20,13 +20,6 @@ def _load_yaml_config() -> dict:
         return yaml.safe_load(handle) or {}
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
 _yaml = _load_yaml_config()
 _pipeline = _yaml.get("pipeline", {})
 _ocr = _yaml.get("ocr", {})
@@ -45,12 +38,6 @@ class Settings:
     tesseract_cmd: str = os.getenv("TESSERACT_CMD", "/usr/bin/tesseract")
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
-    legacy_pipeline: bool = _env_bool("LEGACY_PIPELINE", False)
-
-    legacy_extraction_path: str = _pipeline.get(
-        "legacy_extraction_path",
-        "legacy:triple_ocr_triple_llm_tmr",
-    )
     default_confidence: str = _pipeline.get("default_confidence", "high")
 
     text_min_chars: int = _text.get("min_chars", 80)
@@ -66,19 +53,9 @@ class Settings:
     ocr_paddle_threshold: int = _ocr.get("paddle_threshold", 15)
     ocr_pdf_dpi: int = _ocr.get("pdf_dpi", 300)
 
-    llm_primary_model: str = _llm.get("primary_model", _llm.get("deepseek_model", "deepseek-ai/DeepSeek-V4-Flash"))
+    llm_primary_model: str = _llm.get("primary_model", "deepseek-ai/DeepSeek-V4-Flash")
     llm_use_structured_output: bool = _llm.get("use_structured_output", True)
     llm_temperature: float = float(_llm.get("temperature", 0.0))
-
-    llm_deepseek_model: str = _llm.get("deepseek_model", llm_primary_model)
-    llm_llama_model: str = _llm.get(
-        "llama_model",
-        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-    )
-    llm_maverick_model: str = _llm.get(
-        "maverick_model",
-        "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    )
 
     validation_totals_tolerance: float = float(_validation.get("totals_tolerance", 1.0))
 

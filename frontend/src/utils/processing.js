@@ -11,9 +11,6 @@ export function stageIndexFromStages(stages, progressStage) {
   const index = stages.findIndex((stage) => stage.id === progressStage);
   if (index >= 0) return index;
 
-  if (progressStage.startsWith("ocr:")) {
-    return stages.findIndex((stage) => stage.id === "ocr:tesseract");
-  }
   if (progressStage.startsWith("text:")) {
     return stages.findIndex((stage) => stage.id === "text:pymupdf");
   }

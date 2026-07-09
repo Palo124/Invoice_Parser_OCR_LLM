@@ -1,6 +1,14 @@
 import json
 
-from app.services.merge.tmr import normalize_value
+
+def normalize_value(value):
+    if isinstance(value, (list, dict)):
+        try:
+            return json.dumps(value, sort_keys=True, ensure_ascii=False)
+        except Exception:
+            return str(value)
+    return value
+
 
 KEY_DISAGREEMENT_FIELDS = (
     "invoice_number",

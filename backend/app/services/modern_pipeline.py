@@ -26,7 +26,7 @@ from app.services.vision.page_images import load_page_images
 
 
 class ModernPipeline:
-    """Phase 1–5: text/LLM/vision extraction, validation, optional escalation."""
+    """Text/LLM/vision extraction, validation, and optional escalation."""
 
     def __init__(self):
         self.text_extractor = TextExtractionService()

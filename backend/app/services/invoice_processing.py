@@ -12,17 +12,12 @@ from app.services.pipeline import InvoicePipeline
 
 STAGE_LABELS = {
     "queued": "Waiting to start",
-    "preprocessing": "Preparing pages",
     "text:pymupdf": "Reading PDF text layer",
     "text:ocr_skipped": "Digital text accepted",
     "text:ocr_compare": "Comparing OCR engines",
-    "ocr:tesseract": "Running Tesseract OCR",
-    "ocr:paddleocr": "Running PaddleOCR",
     "llm:deepseek": "Extracting with DeepSeek",
-    "llm:llama": "Extracting with Llama",
     "llm:vision": "Extracting with vision model",
     "llm:escalation": "Escalating with DeepSeek-V4-Pro",
-    "tmr": "Merging results (TMR)",
     "validation": "Running validation checks",
     "complete": "Finished",
     "cancelled": "Cancelled",
@@ -52,25 +47,14 @@ def is_cancel_requested(invoice_id: int) -> bool:
 
 
 def get_display_stages() -> list[dict[str, str]]:
-    if settings.legacy_pipeline:
-        order = [
-            "preprocessing",
-            "ocr:tesseract",
-            "ocr:paddleocr",
-            "llm:deepseek",
-            "llm:llama",
-            "tmr",
-            "validation",
-        ]
-    else:
-        order = [
-            "text:pymupdf",
-            "text:ocr_compare",
-            "llm:deepseek",
-            "llm:vision",
-            "llm:escalation",
-            "validation",
-        ]
+    order = [
+        "text:pymupdf",
+        "text:ocr_compare",
+        "llm:deepseek",
+        "llm:vision",
+        "llm:escalation",
+        "validation",
+    ]
 
     return [
         {"id": stage, "label": STAGE_LABELS[stage]}
@@ -80,11 +64,10 @@ def get_display_stages() -> list[dict[str, str]]:
 
 
 def begin_processing(invoice: Invoice) -> None:
-    pipeline_mode = "legacy" if settings.legacy_pipeline else "modern"
     invoice.status = "processing"
     invoice.metadata_json = json.dumps(
         {
-            "pipeline_mode": pipeline_mode,
+            "pipeline_mode": "modern",
             "progress": {"stage": "queued", "label": STAGE_LABELS["queued"]},
             "steps": {},
             "flags": [],
@@ -137,9 +120,8 @@ def apply_pipeline_result(invoice: Invoice, result) -> None:
 
 
 def _save_progress(db: Session, invoice: Invoice, stage: str, steps: dict) -> None:
-    pipeline_mode = "legacy" if settings.legacy_pipeline else "modern"
     metadata = {
-        "pipeline_mode": pipeline_mode,
+        "pipeline_mode": "modern",
         "progress": {"stage": stage, "label": STAGE_LABELS.get(stage, stage)},
         "steps": steps,
         "flags": [],

@@ -14,7 +14,6 @@ class InvoiceValidationService:
         *,
         raw_text: str = "",
         ocr_comparison: OCRComparisonResult | None = None,
-        merge_disagreements: list[ValidationError] | None = None,
         extraction_failed: bool = False,
     ) -> ValidationResult:
         errors: list[ValidationError] = []
@@ -36,9 +35,6 @@ class InvoiceValidationService:
                     severity="error",
                 )
             )
-
-        if merge_disagreements:
-            errors.extend(merge_disagreements)
 
         flags = collect_flags(errors)
         result = score_validation(
