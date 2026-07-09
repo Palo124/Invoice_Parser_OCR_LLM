@@ -62,7 +62,11 @@ class Settings:
     ocr_paddle_threshold: int = _ocr.get("paddle_threshold", 15)
     ocr_pdf_dpi: int = _ocr.get("pdf_dpi", 300)
 
-    llm_deepseek_model: str = _llm.get("deepseek_model", "deepseek-ai/DeepSeek-V4-Flash")
+    llm_primary_model: str = _llm.get("primary_model", _llm.get("deepseek_model", "deepseek-ai/DeepSeek-V4-Flash"))
+    llm_use_structured_output: bool = _llm.get("use_structured_output", True)
+    llm_temperature: float = float(_llm.get("temperature", 0.0))
+
+    llm_deepseek_model: str = _llm.get("deepseek_model", llm_primary_model)
     llm_llama_model: str = _llm.get(
         "llama_model",
         "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",

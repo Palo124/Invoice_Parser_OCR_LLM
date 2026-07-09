@@ -35,3 +35,6 @@ class PipelineResult:
     metadata: dict[str, Any] = field(default_factory=dict)
     text_extraction: TextExtractionResult | None = None
     extractions: list[ExtractionResult] = field(default_factory=list)
+    raw_text: str = ""
+    llm_raw_json: str = ""
+    model_used: str = ""

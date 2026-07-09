@@ -94,6 +94,9 @@ def reset_for_reprocess(invoice: Invoice) -> None:
     invoice.extraction_path = None
     invoice.confidence = None
     invoice.needs_review = False
+    invoice.raw_text = None
+    invoice.llm_raw_json = None
+    invoice.model_used = None
     begin_processing(invoice)
 
 
@@ -106,6 +109,9 @@ def apply_pipeline_result(invoice: Invoice, result) -> None:
     invoice.extraction_path = result.extraction_path
     invoice.confidence = result.confidence
     invoice.needs_review = result.needs_review
+    invoice.raw_text = result.raw_text or None
+    invoice.llm_raw_json = result.llm_raw_json or None
+    invoice.model_used = result.model_used or None
     invoice.metadata_json = json.dumps(
         {
             **result.metadata,

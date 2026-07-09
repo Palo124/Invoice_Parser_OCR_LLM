@@ -19,6 +19,9 @@ ocr:
 
 # Fast models for legacy 2x LLM path (see https://deepinfra.com/models)
 llm:
+  primary_model: deepseek-ai/DeepSeek-V4-Flash
+  use_structured_output: true
+  temperature: 0.0
   deepseek_model: deepseek-ai/DeepSeek-V4-Flash
   llama_model: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
   maverick_model: meta-llama/Llama-4-Scout-17B-16E-Instruct

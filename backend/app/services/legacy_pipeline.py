@@ -209,4 +209,7 @@ class LegacyPipeline:
             },
             text_extraction=text_extraction,
             extractions=extractions,
+            raw_text=text_extraction.text,
+            llm_raw_json=extractions[0].raw_output,
+            model_used=",".join(item.model for item in extractions),
         )

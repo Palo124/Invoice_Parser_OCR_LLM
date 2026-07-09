@@ -45,6 +45,9 @@ def _to_detail(invoice: Invoice) -> InvoiceDetail:
         data=data,
         error_message=invoice.error_message,
         metadata=metadata,
+        raw_text=invoice.raw_text,
+        llm_raw_json=invoice.llm_raw_json,
+        model_used=invoice.model_used,
     )
 
 

@@ -56,3 +56,6 @@ class InvoiceDetail(InvoiceSummary):
     data: dict[str, Any] | None = None
     error_message: str | None = None
     metadata: PipelineMetadata | None = None
+    raw_text: str | None = None
+    llm_raw_json: str | None = None
+    model_used: str | None = None

@@ -20,4 +20,7 @@ class Invoice(Base):
     confidence: Mapped[str | None] = mapped_column(String(32), nullable=True)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_raw_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_used: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

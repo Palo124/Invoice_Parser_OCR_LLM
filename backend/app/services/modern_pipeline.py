@@ -2,9 +2,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.services.exceptions import ProcessingCancelled
-from app.services.llm.deepinfra import DeepInfraClient
-from app.services.llm.json_extractor import JSONExtractor
-from app.services.llm.prompt import get_prompt
+from app.services.llm.extractor import InvoiceLLMExtractor
 from app.services.text_extraction.service import TextExtractionService
 from app.services.types import (
     CancelCheck,
@@ -16,21 +14,11 @@ from app.services.types import (
 
 
 class ModernPipeline:
-    """Phase 1 pipeline: decision-tree text extraction + interim single-LLM extraction."""
+    """Phase 1+2: decision-tree text extraction + single primary LLM extraction."""
 
     def __init__(self):
-        if not settings.deepinfra_api_key:
-            raise ValueError("DEEPINFRA_API_KEY is not set")
-
         self.text_extractor = TextExtractionService()
-        self.llm = DeepInfraClient(
-            settings.deepinfra_api_key,
-            settings.llm_deepseek_model,
-        )
-
-    def _call_llm(self, filename: str, text: str):
-        prompt = [{"role": "user", "content": get_prompt(filename, text)}]
-        return self.llm.get_chat_completion(prompt, temperature=0.0)
+        self.llm_extractor = InvoiceLLMExtractor()
 
     def process_file(
         self,
@@ -94,39 +82,37 @@ class ModernPipeline:
 
         check_cancelled()
         report("llm:deepseek")
-        response = self._call_llm(filename, bundle.text)
-        content = response.choices[0].message.content or ""
-        parsed = JSONExtractor.extract_json(content)
-        prompt_tokens = response.usage.prompt_tokens
-        completion_tokens = response.usage.completion_tokens
+        llm_result = self.llm_extractor.extract(filename, bundle.text, bundle.source)
 
         extraction = ExtractionResult(
-            data=parsed,
-            model=settings.llm_deepseek_model,
+            data=llm_result.parsed_data,
+            model=llm_result.model,
             confidence="high" if bundle.ocr_comparison is None else bundle.ocr_comparison.agreement,
-            raw_output=content,
+            warnings=llm_result.validation_warnings,
+            raw_output=llm_result.raw_output,
             ocr_engine=bundle.source,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
+            prompt_tokens=llm_result.prompt_tokens,
+            completion_tokens=llm_result.completion_tokens,
         )
         steps["llm"].append(
             {
-                "model": settings.llm_deepseek_model,
+                "model": llm_result.model,
                 "ocr_engine": bundle.source,
-                "raw_output": content,
-                "parsed_json": parsed,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
+                "raw_output": llm_result.raw_output,
+                "parsed_json": llm_result.parsed_data,
+                "prompt_tokens": llm_result.prompt_tokens,
+                "completion_tokens": llm_result.completion_tokens,
+                "structured_output": llm_result.structured_output,
+                "validation_warnings": llm_result.validation_warnings,
             }
         )
 
-        total_tokens = prompt_tokens + completion_tokens
-        total_cost = getattr(response.usage, "estimated_cost", 0.0)
+        total_tokens = llm_result.prompt_tokens + llm_result.completion_tokens
         needs_review = bundle.ocr_comparison is not None and bundle.ocr_comparison.agreement == "low"
         confidence = "high" if not needs_review else "medium"
 
         return PipelineResult(
-            data=parsed,
+            data=llm_result.parsed_data,
             extraction_path=bundle.extraction_path,
             confidence=confidence,
             needs_review=needs_review,
@@ -135,11 +121,15 @@ class ModernPipeline:
                 "pipeline_mode": "modern",
                 "text_branch": bundle.branch,
                 "token_usage": {"total_tokens": total_tokens},
-                "estimated_cost": total_cost,
-                "models": [settings.llm_deepseek_model],
+                "estimated_cost": llm_result.estimated_cost,
+                "models": [llm_result.model],
+                "structured_output": llm_result.structured_output,
                 "steps": steps,
                 **bundle.metadata,
             },
             text_extraction=text_extraction,
             extractions=[extraction],
+            raw_text=bundle.text,
+            llm_raw_json=llm_result.raw_output,
+            model_used=llm_result.model,
         )
