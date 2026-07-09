@@ -44,6 +44,9 @@ class PipelineSteps(BaseModel):
     vision_trigger: dict[str, Any] | None = None
     vision: dict[str, Any] | None = None
     vision_merge: dict[str, Any] | None = None
+    escalation_trigger: dict[str, Any] | None = None
+    escalation: dict[str, Any] | None = None
+    escalation_merge: dict[str, Any] | None = None
 
 
 class PipelineMetadata(BaseModel):
@@ -54,6 +57,8 @@ class PipelineMetadata(BaseModel):
     models: list[str] = Field(default_factory=list)
     vision_used: bool | None = None
     vision_triggers: list[str] = Field(default_factory=list)
+    escalation_used: bool | None = None
+    escalation_triggers: list[str] = Field(default_factory=list)
     steps: PipelineSteps | None = None
 
 

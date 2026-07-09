@@ -1,7 +1,14 @@
 from pathlib import Path
 
 from app.config import settings
+from app.services.escalation import (
+    detect_text_vision_disagreements,
+    fields_to_override,
+    merge_escalation_overrides,
+    should_escalate,
+)
 from app.services.exceptions import ProcessingCancelled
+from app.services.llm.escalation_extractor import InvoiceEscalationExtractor
 from app.services.llm.extractor import InvoiceLLMExtractor
 from app.services.llm.vision_extractor import InvoiceVisionExtractor
 from app.services.pipeline_common import finalize_pipeline_result
@@ -19,12 +26,13 @@ from app.services.vision.page_images import load_page_images
 
 
 class ModernPipeline:
-    """Phase 1–4: text extraction, LLM extraction, optional vision fallback, validation."""
+    """Phase 1–5: text/LLM/vision extraction, validation, optional escalation."""
 
     def __init__(self):
         self.text_extractor = TextExtractionService()
         self.llm_extractor = InvoiceLLMExtractor()
         self.vision_extractor = InvoiceVisionExtractor()
+        self.escalation_extractor = InvoiceEscalationExtractor()
         self.validator = InvoiceValidationService()
 
     def process_file(
@@ -120,6 +128,9 @@ class ModernPipeline:
         models = [llm_result.model]
         vision_used = False
         vision_triggers: list[str] = []
+        vision_data: dict | None = None
+        escalation_used = False
+        escalation_triggers: list[str] = []
 
         run_vision, vision_triggers = should_use_vision(
             branch=bundle.branch,
@@ -139,9 +150,10 @@ class ModernPipeline:
             report("llm:vision")
             page_images = load_page_images(file_path)
             vision_result = self.vision_extractor.extract(filename, page_images)
+            vision_data = vision_result.parsed_data
             merged_data, merged_fields = merge_text_and_vision(
                 llm_result.parsed_data,
-                vision_result.parsed_data,
+                vision_data,
             )
             final_data = merged_data
             vision_used = True
@@ -152,7 +164,7 @@ class ModernPipeline:
 
             extractions.append(
                 ExtractionResult(
-                    data=vision_result.parsed_data,
+                    data=vision_data,
                     model=vision_result.model,
                     raw_output=vision_result.raw_output,
                     ocr_engine="vision",
@@ -164,7 +176,7 @@ class ModernPipeline:
                 "model": vision_result.model,
                 "page_count": vision_result.page_count,
                 "raw_output": vision_result.raw_output,
-                "parsed_json": vision_result.parsed_data,
+                "parsed_json": vision_data,
                 "prompt_tokens": vision_result.prompt_tokens,
                 "completion_tokens": vision_result.completion_tokens,
                 "triggers": vision_triggers,
@@ -174,13 +186,84 @@ class ModernPipeline:
                 "merged_json": merged_data,
             }
 
-        check_cancelled()
-        report("validation")
         validation = self.validator.validate(
             final_data,
             raw_text=bundle.text,
             ocr_comparison=bundle.ocr_comparison,
         )
+
+        run_escalation, escalation_triggers = should_escalate(
+            validation,
+            text_data=llm_result.parsed_data,
+            vision_data=vision_data,
+        )
+        steps["escalation_trigger"] = {
+            "enabled": settings.escalation_enabled,
+            "should_run": run_escalation,
+            "reasons": escalation_triggers,
+            "max_retries": settings.escalation_max_retries,
+        }
+
+        if settings.escalation_enabled and run_escalation:
+            check_cancelled()
+            report("llm:escalation")
+            disagreement_fields = (
+                detect_text_vision_disagreements(llm_result.parsed_data, vision_data)
+                if vision_data is not None
+                else []
+            )
+            override_fields = fields_to_override(validation.errors, disagreement_fields)
+            escalation_result = self.escalation_extractor.extract(
+                filename,
+                bundle.text,
+                final_data,
+                vision_json=vision_data,
+                validation_errors=[error.to_dict() for error in validation.errors],
+                triggers=escalation_triggers,
+            )
+            final_data, applied_fields = merge_escalation_overrides(
+                final_data,
+                escalation_result.parsed_data,
+                override_fields,
+            )
+            escalation_used = True
+            extraction_path = f"{extraction_path}+escalation"
+            total_tokens += escalation_result.prompt_tokens + escalation_result.completion_tokens
+            total_cost += escalation_result.estimated_cost
+            models.append(escalation_result.model)
+
+            extractions.append(
+                ExtractionResult(
+                    data=escalation_result.parsed_data,
+                    model=escalation_result.model,
+                    raw_output=escalation_result.raw_output,
+                    ocr_engine="escalation",
+                    prompt_tokens=escalation_result.prompt_tokens,
+                    completion_tokens=escalation_result.completion_tokens,
+                )
+            )
+            steps["escalation"] = {
+                "model": escalation_result.model,
+                "raw_output": escalation_result.raw_output,
+                "parsed_json": escalation_result.parsed_data,
+                "prompt_tokens": escalation_result.prompt_tokens,
+                "completion_tokens": escalation_result.completion_tokens,
+                "triggers": escalation_triggers,
+                "override_fields": override_fields,
+            }
+            steps["escalation_merge"] = {
+                "applied_fields": applied_fields,
+                "merged_json": final_data,
+            }
+
+            validation = self.validator.validate(
+                final_data,
+                raw_text=bundle.text,
+                ocr_comparison=bundle.ocr_comparison,
+            )
+
+        check_cancelled()
+        report("validation")
 
         return finalize_pipeline_result(
             data=final_data,
@@ -196,6 +279,8 @@ class ModernPipeline:
                 "structured_output": llm_result.structured_output,
                 "vision_used": vision_used,
                 "vision_triggers": vision_triggers if vision_used else [],
+                "escalation_used": escalation_used,
+                "escalation_triggers": escalation_triggers if escalation_used else [],
                 **bundle.metadata,
             },
             text_extraction=text_extraction,

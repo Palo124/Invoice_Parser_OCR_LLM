@@ -37,3 +37,8 @@ vision:
   min_chars_per_page: 120
   min_numeric_columns: 3
   min_numeric_lines: 4
+
+escalation:
+  enabled: true
+  model: deepseek-ai/DeepSeek-V4-Pro
+  max_retries: 1

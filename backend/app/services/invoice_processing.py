@@ -21,6 +21,7 @@ STAGE_LABELS = {
     "llm:deepseek": "Extracting with DeepSeek",
     "llm:llama": "Extracting with Llama",
     "llm:vision": "Extracting with vision model",
+    "llm:escalation": "Escalating with DeepSeek-V4-Pro",
     "tmr": "Merging results (TMR)",
     "validation": "Running validation checks",
     "complete": "Finished",
@@ -67,6 +68,7 @@ def get_display_stages() -> list[dict[str, str]]:
             "text:ocr_compare",
             "llm:deepseek",
             "llm:vision",
+            "llm:escalation",
             "validation",
         ]
 

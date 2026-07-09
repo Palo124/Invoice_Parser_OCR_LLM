@@ -86,6 +86,24 @@ export default function PipelineStepsView({ steps, live = false }) {
         </StepBlock>
       )}
 
+      {steps.escalation && (
+        <StepBlock
+          title="Escalation extraction"
+          subtitle={`${steps.escalation.model} · ${steps.escalation.triggers?.join(", ") || "triggered"}`}
+        >
+          <pre>{JSON.stringify(steps.escalation, null, 2)}</pre>
+        </StepBlock>
+      )}
+
+      {steps.escalation_merge && (
+        <StepBlock
+          title="Escalation merge"
+          subtitle={`${steps.escalation_merge.applied_fields?.length || 0} field(s) overridden`}
+        >
+          <pre>{JSON.stringify(steps.escalation_merge, null, 2)}</pre>
+        </StepBlock>
+      )}
+
       {steps.tmr?.merged_json && (
         <StepBlock
           title={`${steps.text_extraction ? "5" : "4"}. TMR merge`}

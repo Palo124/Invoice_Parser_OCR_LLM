@@ -35,6 +35,7 @@ _text = _yaml.get("text_extraction", {})
 
 _validation = _yaml.get("validation", {})
 _vision = _yaml.get("vision", {})
+_escalation = _yaml.get("escalation", {})
 
 
 class Settings:
@@ -91,6 +92,13 @@ class Settings:
     vision_min_chars_per_page: int = int(_vision.get("min_chars_per_page", 120))
     vision_min_numeric_columns: int = int(_vision.get("min_numeric_columns", 3))
     vision_min_numeric_lines: int = int(_vision.get("min_numeric_lines", 4))
+
+    escalation_enabled: bool = _escalation.get("enabled", True)
+    llm_escalation_model: str = _escalation.get(
+        "model",
+        "deepseek-ai/DeepSeek-V4-Pro",
+    )
+    escalation_max_retries: int = int(_escalation.get("max_retries", 1))
 
 
 settings = Settings()

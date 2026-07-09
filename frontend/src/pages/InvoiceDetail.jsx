@@ -163,6 +163,7 @@ export default function InvoiceDetail() {
           <p>Needs review: {invoice.needs_review ? "yes" : "no"}</p>
           {invoice.review_status && <p>Review status: {invoice.review_status}</p>}
           {invoice.metadata?.vision_used && <p>Vision fallback: used</p>}
+          {invoice.metadata?.escalation_used && <p>Escalation model: used</p>}
         </>
       )}
 
